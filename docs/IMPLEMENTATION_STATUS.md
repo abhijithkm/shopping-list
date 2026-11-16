@@ -197,7 +197,7 @@ Everything in product requirements A to F works with no account and no network. 
 
 ### Left for the owner
 
-1. Delete the two throwaway accounts (`slverify-a-75794793@example.com`, `slverify-b-75794793@example.com`) from the dev app's Users tab in the AppHub admin; their rows go with them.
+1. With your MySQL admin login (the panel's Tables, Run SQL asks for it each time; Claude does not have it), run on `shoppinglistdev`: `ALTER TABLE users DROP CHECK chk_users_status; ALTER TABLE users ADD CONSTRAINT chk_users_status CHECK (status IN ('active','inactive','suspended'));` (a defect found while cleaning up: AppHub's **Suspend account** writes `suspended`, which the first version of `schema.sql` refused with a 500; `schema.sql` is fixed, the live dev database is not), then `DELETE FROM users WHERE email LIKE 'slverify-%@example.com';` to remove the two throwaway accounts (`slverify-a-75794793@example.com`, `slverify-b-75794793@example.com`; the foreign keys cascade their rows). Both accounts are already signed out everywhere; the panel has no delete-user action and the app roles cannot delete.
 2. Say whether the server can send mail (password reset and email verification depend on it) and when to create the production app `shoppinglist` from the same files.
 3. Optionally try the app by hand against the dev app: a debug build with `-PSL_APPHUB_BASE_URL=https://132-226-190-156.sslip.io/apphub/` and a throwaway account of your own.
 

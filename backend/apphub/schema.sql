@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS users (
     PRIMARY KEY (id),
     UNIQUE KEY uq_users_email (email),
     CONSTRAINT chk_users_role CHECK (role IN ('user', 'admin')),
-    CONSTRAINT chk_users_status CHECK (status IN ('active', 'inactive'))
+    CONSTRAINT chk_users_status CHECK (status IN ('active', 'inactive', 'suspended'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- A shopping list. `sort_key` is reserved for manual list order; `color` is a signed ARGB integer.
