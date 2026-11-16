@@ -33,6 +33,7 @@ import space.abhijithkm.shoppinglist.BuildConfig
 import space.abhijithkm.shoppinglist.R
 import space.abhijithkm.shoppinglist.core.model.AppSettings
 import space.abhijithkm.shoppinglist.core.model.ThemeMode
+import space.abhijithkm.shoppinglist.feature.account.AccountSection
 import space.abhijithkm.shoppinglist.ui.NoInsets
 
 @Composable
@@ -42,6 +43,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
         settings = settings,
         onThemeModeChange = viewModel::setThemeMode,
         onShowCompletedChange = viewModel::setShowCompleted,
+        accountSection = { AccountSection() },
     )
 }
 
@@ -51,6 +53,8 @@ fun SettingsScreenContent(
     settings: AppSettings,
     onThemeModeChange: (ThemeMode) -> Unit,
     onShowCompletedChange: (Boolean) -> Unit,
+    /** The Account block; a slot so this screen's tests need no Hilt. */
+    accountSection: @Composable () -> Unit = {},
 ) {
     Scaffold(
         topBar = { TopAppBar(title = { Text(stringResource(R.string.nav_settings)) }) },
@@ -63,6 +67,8 @@ fun SettingsScreenContent(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            accountSection()
+            HorizontalDivider()
             SectionTitle(R.string.settings_theme)
             Column(Modifier.selectableGroup()) {
                 ThemeMode.entries.forEach { mode ->
