@@ -15,6 +15,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import space.abhijithkm.shoppinglist.core.model.ListSort
 import space.abhijithkm.shoppinglist.core.model.ThemeMode
 
 class SettingsRepositoryTest {
@@ -51,5 +52,28 @@ class SettingsRepositoryTest {
         val store = newStore()
         store.edit { it[stringPreferencesKey("theme_mode")] = "PURPLE" }
         assertEquals(ThemeMode.SYSTEM, SettingsRepository(store).settings.first().themeMode)
+    }
+
+    @Test
+    fun `list sort and grouping default to recent and ungrouped`() = runTest {
+        val settings = SettingsRepository(newStore()).settings.first()
+        assertEquals(ListSort.RECENT, settings.listSort)
+        assertFalse(settings.groupByCategory)
+    }
+
+    // Each persistence test performs exactly one write: on Windows DataStore's atomic rename fails
+    // when it must replace a file it still holds open (a JVM test-environment quirk only).
+    @Test
+    fun `list sort is persisted`() = runTest {
+        val repository = SettingsRepository(newStore())
+        repository.setListSort(ListSort.NAME)
+        assertEquals(ListSort.NAME, repository.settings.first().listSort)
+    }
+
+    @Test
+    fun `grouping by category is persisted`() = runTest {
+        val repository = SettingsRepository(newStore())
+        repository.setGroupByCategory(true)
+        assertTrue(repository.settings.first().groupByCategory)
     }
 }

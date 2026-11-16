@@ -69,7 +69,7 @@ class AppDatabaseTest {
         db.itemDao().upsert(item("eggs", "groceries"))
         db.itemDao().upsert(item("old", "groceries", deletedAt = 5L))
 
-        val row = db.listDao().observeActiveWithCounts().first().single()
+        val row = db.listDao().observeWithCounts(archived = false).first().single()
         assertEquals(2, row.totalCount)
         assertEquals(1, row.boughtCount)
     }
@@ -80,7 +80,7 @@ class AppDatabaseTest {
         db.listDao().upsert(list("new", updatedAt = 9L))
         db.listDao().upsert(list("pinned", pinned = true, updatedAt = 2L))
 
-        val ids = db.listDao().observeActiveWithCounts().first().map { it.list.id }
+        val ids = db.listDao().observeWithCounts(archived = false).first().map { it.list.id }
         assertEquals(listOf("pinned", "new", "old"), ids)
     }
 
@@ -90,19 +90,20 @@ class AppDatabaseTest {
         db.listDao().upsert(list("archived", archived = true))
         db.listDao().upsert(list("deleted", deletedAt = 3L))
 
-        val ids = db.listDao().observeActiveWithCounts().first().map { it.list.id }
+        val ids = db.listDao().observeWithCounts(archived = false).first().map { it.list.id }
         assertEquals(listOf("visible"), ids)
     }
 
     @Test
-    fun openItemsComeBeforeBoughtThenManualOrder() = runTest {
+    fun itemsComeInManualOrderAndDeletedOnesAreHidden() = runTest {
         db.listDao().upsert(list("l"))
-        db.itemDao().upsert(item("b-bought", "l", bought = true, sortOrder = 1.0))
+        // The DAO returns manual order only; the UI splits open and bought items into sections.
+        db.itemDao().upsert(item("b-bought", "l", bought = true, sortOrder = 3.0))
         db.itemDao().upsert(item("a-second", "l", sortOrder = 2.0))
         db.itemDao().upsert(item("a-first", "l", sortOrder = 1.0))
         db.itemDao().upsert(item("gone", "l", deletedAt = 7L))
 
-        val ids = db.itemDao().observeForList("l").first().map { it.id }
+        val ids = db.itemDao().observeForList("l").first().map { it.item.id }
         assertEquals(listOf("a-first", "a-second", "b-bought"), ids)
     }
 

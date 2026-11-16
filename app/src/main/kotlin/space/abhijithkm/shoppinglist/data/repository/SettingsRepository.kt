@@ -13,9 +13,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import space.abhijithkm.shoppinglist.core.model.AppSettings
+import space.abhijithkm.shoppinglist.core.model.ListSort
 import space.abhijithkm.shoppinglist.core.model.ThemeMode
 
-/** App preferences in DataStore. Secrets never live here; tokens get their own encrypted store in Phase 3. */
+/** App preferences in DataStore (theme, list sort, completed-items and grouping options). Secrets never live here; tokens get their own encrypted store in Phase 3. */
 @Singleton
 class SettingsRepository @Inject constructor(
     private val dataStore: DataStore<Preferences>,
@@ -32,14 +33,27 @@ class SettingsRepository @Inject constructor(
         dataStore.edit { it[SHOW_COMPLETED] = show }
     }
 
+    suspend fun setListSort(sort: ListSort) {
+        dataStore.edit { it[LIST_SORT] = sort.name }
+    }
+
+    suspend fun setGroupByCategory(group: Boolean) {
+        dataStore.edit { it[GROUP_BY_CATEGORY] = group }
+    }
+
     private fun Preferences.toSettings() = AppSettings(
         themeMode = this[THEME_MODE]?.let { stored -> ThemeMode.entries.firstOrNull { it.name == stored } }
             ?: ThemeMode.SYSTEM,
         showCompleted = this[SHOW_COMPLETED] ?: true,
+        listSort = this[LIST_SORT]?.let { stored -> ListSort.entries.firstOrNull { it.name == stored } }
+            ?: ListSort.RECENT,
+        groupByCategory = this[GROUP_BY_CATEGORY] ?: false,
     )
 
     private companion object {
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val SHOW_COMPLETED = booleanPreferencesKey("show_completed")
+        val LIST_SORT = stringPreferencesKey("list_sort")
+        val GROUP_BY_CATEGORY = booleanPreferencesKey("group_by_category")
     }
 }
