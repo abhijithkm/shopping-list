@@ -192,6 +192,32 @@ class SyncEngineTest {
     private fun assertNotEquals(message: String, a: Any?, b: Any?) = assertFalse(message, a == b)
 
     @Test
+    fun onlyTheAccountsOwnRowCountsAsTheOverrideOfABuiltInCategory() = runBlocking {
+        val a = device("A")
+        a.repo.updateCategory("dairy", name = "Mine")
+        a.run()
+        // Another row naming the same built-in, with an id that is not the account's deterministic one (other software, or by hand).
+        hub.advanceClock(60_000)
+        hub.put(
+            USER,
+            Tables.CATEGORIES,
+            JsonObject(
+                mapOf(
+                    "id" to JsonPrimitive("99999999-9999-4999-8999-999999999999"), "builtin_key" to JsonPrimitive("dairy"),
+                    "name" to JsonPrimitive("Impostor"), "created_at_ms" to JsonPrimitive(1),
+                ),
+            ),
+        )
+        val b = device("B")
+
+        b.run()
+
+        assertEquals("Mine", b.db.categoryDao().getById("dairy")!!.name)
+        a.run()
+        assertEquals("Mine", a.db.categoryDao().getById("dairy")!!.name)
+    }
+
+    @Test
     fun aSecondDevicePullsLists_items_tags_andCategoryOverrides() = runBlocking {
         val a = device("A")
         val listId = a.repo.createList("Groceries")

@@ -74,6 +74,13 @@ class SessionManager @Inject constructor(
 
     @Volatile private var tokens: Tokens? = null
 
+    /**
+     * Why the last refresh could not be completed (for example "HTTP 429: Too many requests"), or null. Contains no
+     * token or credential: only the status and the server's own message. For diagnostics and tests.
+     */
+    @Volatile var lastRefreshProblem: String? = null
+        private set
+
     /** A session whose last write to storage failed; retried before the next token is handed out. */
     private var pendingPersist: StoredSession? = null
 
@@ -168,11 +175,14 @@ class SessionManager @Inject constructor(
                     endSessionLocked(account)
                     RefreshResult.SessionEnded
                 } else {
+                    lastRefreshProblem = "HTTP ${e.status}: ${e.message}"
                     RefreshResult.Unavailable
                 }
             } catch (e: AppHubException) {
+                lastRefreshProblem = e::class.simpleName
                 return@withContext RefreshResult.Unavailable
             }
+            lastRefreshProblem = null
             val updated = pair.user?.toAccount(account) ?: account
             // Persist before use. If the write fails, the session is kept in memory for this process and the write
             // is retried before the next token is handed out; it cannot be made atomic with the server's rotation.

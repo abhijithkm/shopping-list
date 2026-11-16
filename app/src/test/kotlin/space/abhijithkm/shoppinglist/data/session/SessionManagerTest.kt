@@ -12,6 +12,7 @@ import mockwebserver3.RecordedRequest
 import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -254,6 +255,18 @@ class SessionManagerTest {
 
         assertEquals(SessionState.SignedIn(ann), session.state.value)
         assertEquals("r0", storage.stored?.refreshToken)
+    }
+
+    @Test
+    fun theReasonARefreshWasUnavailableIsRecordedWithoutAnySecret() = runTest {
+        json(429, """{"ok":false,"error":{"status":429,"message":"Too many requests"}}""", "Retry-After" to "5")
+        val session = manager(signedInStorage("r-secret"))
+        session.restore()
+
+        assertEquals(RefreshResult.Unavailable, session.refreshAfterRejection(null))
+
+        assertEquals("HTTP 429: Too many requests", session.lastRefreshProblem)
+        assertFalse(session.lastRefreshProblem!!.contains("secret"))
     }
 
     @Test

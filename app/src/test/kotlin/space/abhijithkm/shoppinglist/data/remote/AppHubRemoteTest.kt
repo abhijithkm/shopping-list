@@ -167,6 +167,33 @@ class AppHubRemoteTest {
     }
 
     @Test
+    fun theAuthClientUsesAFreshConnectionPerCallDoesNotRetryAndDoesNotFollowRedirects() = runTest {
+        json(200, """{"ok":true,"data":{}}""")
+        val client = AppHubHttp.authClient()
+        val api = appHubRetrofit(AppHubConfig(server.url("/apphub/").toString(), "shoppinglistdev"), client).create(AppHubAuthApi::class.java)
+
+        appHubCallUnit { api.logout(RefreshRequest("t")) }
+
+        assertEquals("close", server.next().headers["Connection"])
+        assertFalse(client.retryOnConnectionFailure)
+        assertFalse(client.followRedirects)
+        assertFalse(client.followSslRedirects)
+    }
+
+    @Test
+    fun theDataClientRetriesDroppedConnectionsKeepsItsOwnDispatcherAndDoesNotFollowRedirects() {
+        val session = io.mockk.mockk<space.abhijithkm.shoppinglist.data.session.SessionManager>(relaxed = true)
+        val a = AppHubHttp.dataClient(session)
+        val b = AppHubHttp.dataClient(session)
+
+        assertTrue(a.retryOnConnectionFailure)
+        assertFalse(a.followRedirects)
+        assertFalse(a.followSslRedirects)
+        assertTrue("each client has its own dispatcher", a.dispatcher !== b.dispatcher)
+        assertTrue(a.authenticator !== okhttp3.Authenticator.NONE)
+    }
+
+    @Test
     fun anUnreadableAuthAnswerNeverQuotesItsBody() = runTest {
         json(200, """{"ok":true,"data":{"access_token":"SECRET-ACCESS","refresh_token":12345,"expires_in":"soon"}}""")
 

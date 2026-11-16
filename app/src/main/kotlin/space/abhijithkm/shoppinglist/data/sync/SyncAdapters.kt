@@ -281,7 +281,11 @@ internal class CategoryAdapter(db: AppDatabase, clock: Clock) : EntityAdapter(db
         val row = RowCodec.category(raw)
         val localId = when {
             row.builtinKey == null -> row.id
-            DefaultCategory.fromKey(row.builtinKey) != null -> row.builtinKey
+            // Only the account's own deterministic row is an override. Another row naming the same built-in (made by
+            // other software, or by hand) would otherwise overwrite it in whatever order the rows arrive.
+            DefaultCategory.fromKey(row.builtinKey) != null ->
+                if (row.id == SyncFields.overrideCloudId(account, row.builtinKey)) row.builtinKey
+                else return@withTransaction ApplyResult(ApplyOutcome.IGNORED)
             // An override of a built-in this app version does not know (a newer app made it): ignore it.
             else -> return@withTransaction ApplyResult(ApplyOutcome.IGNORED)
         }
