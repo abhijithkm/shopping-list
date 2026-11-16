@@ -12,7 +12,13 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.performTextInput
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
@@ -189,6 +195,35 @@ class ListDetailContentTest { // stateless content tests, no Hilt needed
         composeRule.onNodeWithText(text(R.string.undo)).performClick()
         composeRule.waitForIdle()
         assertEquals("b", restored)
+    }
+
+    @Test
+    fun swipingAnItemAwayDeletesItOnceAndUndoBringsItBack() {
+        var deleteCalls = 0
+        composeRule.setContent {
+            var items by remember { mutableStateOf(sample) }
+            val actions = ListDetailActions(
+                onDeleteItem = { id ->
+                    deleteCalls++
+                    items = items.filterNot { it.id == id }
+                },
+                onRestoreItem = { items = sample },
+            )
+            ShoppingListTheme { ListDetailContent(stateOf(items = items), actions) }
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onAllNodesWithTag("item_row").onFirst().performTouchInput { swipeLeft() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(text(R.string.item_deleted)).assertIsDisplayed()
+        composeRule.onAllNodesWithText("Milk").assertCountEquals(0)
+
+        composeRule.onNodeWithText(text(R.string.undo)).performClick()
+        composeRule.waitForIdle()
+
+        // A restored row must come back settled, not still swiped away (which would delete it again).
+        composeRule.onNodeWithText("Milk").assertIsDisplayed()
+        assertEquals(1, deleteCalls)
     }
 
     @Test

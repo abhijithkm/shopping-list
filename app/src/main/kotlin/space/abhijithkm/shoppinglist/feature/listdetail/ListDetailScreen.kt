@@ -591,7 +591,12 @@ private fun SwipeableItemRow(
 ) {
     val dismissState = rememberSwipeToDismissBoxState()
     LaunchedEffect(dismissState.currentValue) {
-        if (dismissState.currentValue == SwipeToDismissBoxValue.EndToStart) onDelete()
+        if (dismissState.currentValue == SwipeToDismissBoxValue.EndToStart) {
+            onDelete()
+            // The swipe state is saved per item key. Reset it now so that an Undo brings the row back
+            // settled in place instead of still swiped away (and then deleting it a second time).
+            dismissState.snapTo(SwipeToDismissBoxValue.Settled)
+        }
     }
     SwipeToDismissBox(
         state = dismissState,
