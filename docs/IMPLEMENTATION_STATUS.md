@@ -129,7 +129,9 @@ Everything in product requirements A to F works with no account and no network. 
 
 ## Phase 3 — AppHub sign-in, sync and guest-to-account migration: implemented; verified against fakes, NOT against the cloud (2026-11-16)
 
-**Status in one sentence:** everything Phase 3 asked for is built and tested end to end on an Android 16 emulator against a faithful fake AppHub, but the app does **not exist on the cloud AppHub yet** (the owner's AppHub admin shows five other apps), so nothing has been verified against the real server and the phase is **not closed**: closing it needs the cloud dev app (see "What is needed to close Phase 3").
+**Status in one sentence:** everything Phase 3 asked for is built and tested end to end on an Android 16 emulator against a faithful fake AppHub; the cloud dev app `shoppinglistdev` was created afterwards (2026-11-16, see below), so the schema and config now exist on the real server, but the **client has not yet been run against it**, so the phase is **not closed** (see "What is needed to close Phase 3").
+
+**Cloud dev app (2026-11-16, after the report above was first written).** The owner's AppHub admin showed no Shopping List app, so with the owner's go-ahead the dev app was created through the admin panel in the owner's signed-in Chrome: database `shoppinglistdev` with the five tables of `schema.sql` (the first run of that file on the real MySQL, no errors), the app registered, `shoppinglist.config.json` saved through Settings, Advanced, and the panel's health check at 12 of 14 (the one warning: no users yet). Public sign-up answers as expected. Nothing was applied for the production app `shoppinglist`. The ledger in [backend/apphub/README.md](../backend/apphub/README.md) has the details.
 
 ### Deliverables
 
@@ -178,7 +180,7 @@ Everything in product requirements A to F works with no account and no network. 
 
 ### What is NOT verified
 
-* **Anything on the real cloud AppHub.** The app (`shoppinglistdev`, `shoppinglist`) is not on it. The schema has never run on MySQL, the config has never been imported, and the real server's behaviour (error texts, 500 on a database refusal, `updated_at` handling, rate limits, whether mail works) is known only from AppHub's source and the fake's documented guesses ([fake-server README](../backend/apphub/fake-server/README.md)).
+* **The client against the real cloud AppHub.** The dev app exists now (the schema loaded on the cloud MySQL and the config was accepted), but no account has been registered and no request of the app has been sent to it. The real server's behaviour (error texts, 500 on a database refusal, `updated_at` handling and time zone, rate limits, whether mail works) is still known only from AppHub's source and the fake's documented guesses ([fake-server README](../backend/apphub/fake-server/README.md)).
 * A physical device, an API 24 to 28 device, a release (R8) build, a very large account (thousands of rows), battery use of the periodic job.
 * Completing a password reset in the app, email verification, and a refresh whose answer is lost on the wire against the real server (it is tested against the fake with `drop_after`).
 
@@ -192,8 +194,8 @@ Everything in product requirements A to F works with no account and no network. 
 
 ### What is needed to close Phase 3
 
-1. The owner's go-ahead and the operator path to create the dev app on the cloud AppHub (`backend/apphub/README.md` has the runbook; the AppHub admin shows no Shopping List app today).
-2. Two test accounts, and an answer on whether the server can send mail.
+1. ~~The cloud dev app~~ (done 2026-11-16).
+2. The owner's go-ahead to register two throwaway test accounts on `shoppinglistdev` (a registration creates a real account on the cloud app; they are removed afterwards), and an answer on whether the server can send mail.
 3. Run the client against `shoppinglistdev` (a debug build with `-PSL_APPHUB_BASE_URL=https://132-226-190-156.sslip.io/apphub/`) and record the result in the backend ledger.
 
 ## Phases 4 to 6

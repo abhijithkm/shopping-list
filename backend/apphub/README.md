@@ -27,16 +27,18 @@ It follows the method of `C:\MyApps\ReadRhythm\apphub\` (`README.md`, `provision
 
 Update this table whenever something is applied, with the date and who did it. Nothing is applied until a row says so.
 
-Observed 2026-11-16 (the owner's screenshot of the cloud AppHub admin, `/apphub/admin/#/apps`): five apps are registered (Fuel Tracker, Leave Tracker, ReadRhythm, Sample Shop, SubmitFlow) and **neither `shoppinglistdev` nor `shoppinglist` exists**, which matches the table below.
+Observed 2026-11-16 before anything was applied (the owner's screenshot of the cloud AppHub admin, `/apphub/admin/#/apps`): five apps were registered (Fuel Tracker, Leave Tracker, ReadRhythm, Sample Shop, SubmitFlow) and neither `shoppinglistdev` nor `shoppinglist` existed.
+
+**How the dev app was created on 2026-11-16.** Not with `tenant.php` over SSH as the runbook below describes, but through the AppHub admin panel in the owner's own signed-in Chrome (Claude drove the browser with the owner's go-ahead; the owner signed in themselves, no password or other secret was typed by Claude): *Add app*, app name `shoppinglistdev`, display name "Shopping List (dev)", *Create a new database* `shoppinglistdev`, *Empty* start, importing a copy of `schema.sql` with only its comment lines removed (the same five `CREATE TABLE` statements), then *Settings, Advanced* with `shoppinglist.config.json` pasted and saved. The panel asked for no MySQL admin login. The SSH runbook remains the way to do the production app and to install the Phase 4 triggers.
 
 | Item | Where | State | When and by whom | Checked by |
 |---|---|---|---|---|
-| Dry run of `schema.sql` on a throwaway database (5 tables, 10 CHECK constraints, 5 foreign keys) | cloud MySQL | not applied | | |
-| Database `shoppinglistdev` and its five tables (`schema.sql`) | cloud MySQL | not applied | | |
-| App `shoppinglistdev` registered with AppHub (`tenant.php add`) | cloud AppHub | not applied | | |
-| Config (`shoppinglist.config.json`) imported into `shoppinglistdev` | cloud AppHub | not applied | | |
-| `check.php shoppinglistdev`, config export and diff | cloud AppHub | not applied | | |
-| Client verified against `shoppinglistdev` (register, sign in, create, sync, refresh) | cloud AppHub, through its public API | not applied | | |
+| Dry run of `schema.sql` on a throwaway database | cloud MySQL | skipped for the dev app: the panel creates the database and removes it again if the import fails | | |
+| Database `shoppinglistdev` and its five tables (`schema.sql`) | cloud MySQL | **applied**: "Database shoppinglistdev created with 5 tables" (so the file runs on the cloud MySQL, CHECKs and foreign keys included) | 2026-11-16 16:00 UTC, Claude in the owner's Chrome, owner's go-ahead | the panel's own confirmation and health check |
+| App `shoppinglistdev` registered with AppHub | cloud AppHub | **applied** (MySQL user `apphub_shoppinglistdev`, key version 1) | same | panel Overview |
+| Config (`shoppinglist.config.json`) in `shoppinglistdev` | cloud AppHub | **applied** through Settings, Advanced ("Settings saved. They apply to the API immediately.") | 2026-11-16, same | panel validation; `POST auth/register {}` answers 422 "A valid email is required" (public sign-up is on) |
+| Health check, config export and diff | cloud AppHub | health check done: 12 of 14 pass, the one warning is "no users yet", the other note is "no CORS origins" (not needed by the Android app); export and diff not done | 2026-11-16 | panel |
+| Client verified against `shoppinglistdev` (register, sign in, create, sync, refresh) | cloud AppHub, through its public API | **not done**: needs throwaway test accounts (registering one creates a real account) | | |
 | Database `shoppinglist` and its five tables (`schema.sql`, same file) | cloud MySQL | not applied | | |
 | App `shoppinglist` registered, config imported, `check.php`, export and diff | cloud AppHub | not applied | | |
 

@@ -6,7 +6,7 @@ Stack: Kotlin, Jetpack Compose (Material 3), Room (source of truth), Hilt, DataS
 
 ## Status
 
-Phases 0 (audit), 1 (Android foundation), 2 (guest lists, all offline) and 3 (AppHub sign-in, sync and guest-to-account migration) are implemented. Phase 3 is verified against fake AppHub servers (an in-memory one in the tests and a faithful Node one for the emulator) and **not yet against the real cloud AppHub**, which needs the owner to create the dev app (see [backend/apphub/README.md](backend/apphub/README.md)). See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for exactly what was verified and what was not.
+Phases 0 (audit), 1 (Android foundation), 2 (guest lists, all offline) and 3 (AppHub sign-in, sync and guest-to-account migration) are implemented. Phase 3 is verified against fake AppHub servers (an in-memory one in the tests and a faithful Node one for the emulator). The cloud dev app `shoppinglistdev` has been created (schema and config applied, see the ledger in [backend/apphub/README.md](backend/apphub/README.md)), but the app has **not yet been run against it**. See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for exactly what was verified and what was not.
 
 ## Requirements
 
