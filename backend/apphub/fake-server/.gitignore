@@ -1,0 +1,4 @@
+# A --data file holds the fake's accounts (password hashes, token hashes, the fake's JWT secret). Never commit one.
+*.data.json
+*.local.json
+state*.json
