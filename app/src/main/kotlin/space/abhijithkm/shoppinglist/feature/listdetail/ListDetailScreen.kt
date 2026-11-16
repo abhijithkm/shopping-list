@@ -73,7 +73,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -165,7 +165,7 @@ fun ListDetailContent(
     val list = state.list
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val resources = LocalContext.current.resources
+    val resources = LocalResources.current
     val undoLabel = stringResource(R.string.undo)
     val itemDeletedMessage = stringResource(R.string.item_deleted)
 

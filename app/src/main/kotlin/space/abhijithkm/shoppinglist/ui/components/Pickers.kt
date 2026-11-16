@@ -74,13 +74,16 @@ fun ColorPicker(
     onSelected: (Int?) -> Unit,
     modifier: Modifier = Modifier,
     options: List<Int> = PickerColors,
+    allowNone: Boolean = true,
 ) {
     Row(
         modifier = modifier.horizontalScroll(rememberScrollState()).selectableGroup(),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Swatch(color = null, selected = selected == null, description = stringResource(R.string.color_none)) {
-            onSelected(null)
+        if (allowNone) {
+            Swatch(color = null, selected = selected == null, description = stringResource(R.string.color_none)) {
+                onSelected(null)
+            }
         }
         options.forEachIndexed { index, color ->
             Swatch(
