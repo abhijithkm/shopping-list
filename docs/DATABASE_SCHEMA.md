@@ -1,15 +1,15 @@
 # Database Schema — local (Room)
 
-Status: reflects Phase 2 (2026-11-16). The authoritative, machine-generated definition is the committed Room export `app/schemas/space.abhijithkm.shoppinglist.data.local.AppDatabase/1.json`; this page explains it. The **cloud** schema (AppHub tables, grant tables, triggers) is designed in [APPHUB_FEASIBILITY §6](APPHUB_FEASIBILITY.md) and will be documented here once it exists in `backend/apphub/` (Phases 3 and 4). Nothing has been created on the cloud AppHub.
+Status: reflects Phase 3 (schema version 2). The authoritative, machine-generated definition is the committed Room export `app/schemas/space.abhijithkm.shoppinglist.data.local.AppDatabase/2.json` (`1.json` is the Phase 2 schema and is the starting point of the tested migration); this page explains it. The **cloud** schema for personal lists is `backend/apphub/schema.sql` (see [APPHUB_INTEGRATION](APPHUB_INTEGRATION.md) §4); the collaboration tables and triggers of Phase 4 are still only designed in [APPHUB_FEASIBILITY §6](APPHUB_FEASIBILITY.md). Nothing has been created on the cloud AppHub.
 
 ## Conventions
 
 - **Ids** are client-generated UUID strings. They double as AppHub primary keys later, which makes creates idempotent (a retried create answers 409 and is then fetched).
 - **Timestamps** are epoch milliseconds (`Long`). On the wire they become UTC `DATETIME(3)` strings.
-- **`revision`** counts local edits (every DAO `UPDATE` adds 1). **`serverRevision`** is the last revision AppHub acknowledged; it is `0` for guest data. The sync engine (Phase 3) uses them for conflict detection.
-- **`deletedAt`** is a tombstone. Deleting never removes a row; the UI hides rows with a tombstone, undo clears it, and `LocalShoppingRepository.purgeExpiredTombstones` hard-deletes **guest** tombstones older than 7 days at app start. Cloud tombstones (`accountId` set) are kept until sync acknowledges them.
-- **`accountId` / `origin`** separate guest data (`accountId = null`, `origin = LOCAL`) from cloud data. Guest data never leaves the device without the explicit migration flow.
-- Schema **version stays 1 until the first public release**; afterwards every change needs a tested migration, never a destructive fallback.
+- **`revision`** counts local edits (every DAO `UPDATE` adds 1). **`serverRevision`** is the revision the server last acknowledged; it is `0` for guest data. A row of an account is **dirty** (has something to push) when `revision > serverRevision` or when it has no sync base yet; no repository method needs a sync hook because of this ([SYNC_STRATEGY](SYNC_STRATEGY.md) §3).
+- **`deletedAt`** is a tombstone. Deleting never removes a row; the UI hides rows with a tombstone, undo clears it, and `LocalShoppingRepository.purgeExpiredTombstones` hard-deletes **guest** tombstones older than 7 days at app start. Account tombstones (`accountId` set) are purged on the same schedule only once the server has acknowledged them.
+- **`accountId` / `origin`** separate guest data (`accountId = null`, `origin = LOCAL`) from account data (`origin = CLOUD`). Guest data never leaves the device without the explicit migration flow. Items have no account column: they belong to the account of their list.
+- **Schema history.** v1 (Phases 1 and 2); v2 adds `sync_entities` and `sync_state` (Phase 3) through a Room auto-migration, tested on a device with a v1 database that has data in it. After the first public release every change keeps needing a tested migration, never a destructive fallback.
 
 ## Tables
 
@@ -75,12 +75,37 @@ Deleting a custom category tombstones it and sets `items.categoryKey = NULL` for
 
 `item_tags`: composite PK `(itemId, tagId)`, both `ON DELETE CASCADE`, plus `listId` denormalised for list-scoped sync. Index `(tagId)`.
 
+### `sync_entities` (v2)
+
+One row per synced entity that sync has touched. Primary key `(type, id)` where `type` is `list`, `item`, `category` or `tag` and `id` is the local id.
+
+| Column | Type | Notes |
+|---|---|---|
+| `base` | TEXT? | canonical JSON of the synced fields as the server last agreed on them: the ancestor of the field diff and the three-way merge. Null means the row has never reached the server (a create is pending) |
+| `failCount` | INTEGER | consecutive failures of this row |
+| `nextAttemptAt` | INTEGER | epoch ms before which the engine does not retry the row (backoff) |
+| `lastError` | TEXT? | the server's message, at most 200 characters |
+| `blocked` | INTEGER (bool) | the row failed too often or was refused; waits for a new edit or Retry |
+| `blockedAtRevision` | INTEGER | the row's `revision` when it was blocked; a higher revision unblocks it |
+
+### `sync_state` (v2)
+
+Primary key `(accountId, key)`, `value` TEXT. Keys: `cursor.tag`, `cursor.category`, `cursor.list`, `cursor.item` (newest server `updated_at` seen per table), `lastPullAt`, `lastSuccessAt`, `lastRun` (JSON of the latest run's outcome and counts).
+
 ## Main queries (contracts the UI relies on)
 
 - Lists screen: lists with `deletedAt IS NULL` and the requested `isArchived`, with live `totalCount` and `boughtCount` (deleted items excluded), pinned first then by `updatedAt`; the ViewModel then re-sorts by the chosen order.
 - List detail: all live items of a list by `sortOrder` with their tags; open/completed split, filtering and grouping happen in a pure, unit-tested function (`buildListDetailState`).
 - Every mutation runs in a transaction that also touches the parent list's `updatedAt`.
 
-## Cloud mapping (planned)
+## Cloud mapping
 
-Each table above maps to an AppHub table with the same logical columns; collaboration adds `list_members`, `list_invitations`, `join_codes`, `join_requests`, `user_lookups`, `code_lookups` and `list_commands`, with membership enforced by AppHub's `shared` scope and MySQL triggers. See [APPHUB_FEASIBILITY §6](APPHUB_FEASIBILITY.md). Input limits above are chosen to fit those columns.
+| Local | Cloud (`backend/apphub/schema.sql`) | Differences |
+|---|---|---|
+| `lists` | `shopping_lists` | `accountId`, `origin`, `role`, `ownerName`, `revision`, `serverRevision`, `createdAt` and `updatedAt` stay local; the cloud has `created_at_ms`, `updated_at_ms` (client clock) and the server-managed `updated_at` |
+| `items` | `shopping_items` | the tag links travel as the JSON text column `tag_ids`; there is **no `item_tags` table in the cloud** (a decision of Phase 3: fewer requests, no join table to keep consistent) |
+| `categories` | `categories` | a built-in override carries `builtin_key` and a deterministic per-account UUID as its cloud id (the local id is the bare key) |
+| `tags` | `tags` | |
+| `item_tags`, `sync_entities`, `sync_state` | none | local only |
+
+Collaboration (Phase 4) adds `list_members`, `list_invitations`, `join_codes`, `join_requests`, `user_lookups`, `code_lookups` and `list_commands`, with membership enforced by AppHub's `shared` scope and MySQL triggers. See [APPHUB_FEASIBILITY §6](APPHUB_FEASIBILITY.md). Input limits above are chosen to fit the cloud columns, and the client enforces them before saving because a database refusal comes back as HTTP 500.

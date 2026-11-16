@@ -1,12 +1,12 @@
 # Shopping List
 
-A native Android shopping-list app: create a list, add items, tick them off. It is **offline-first** and works with **no account**. Cloud sync and shared lists (registered users only) come later and use the owner's own AppHub backend, with the database built **in the cloud only**.
+A native Android shopping-list app: create a list, add items, tick them off. It is **offline-first** and works with **no account**. Signing in (optional) syncs lists across devices; shared lists (registered users only) come later. The only backend is the owner's own AppHub, with the database built **in the cloud only**.
 
-Stack: Kotlin, Jetpack Compose (Material 3), Room (source of truth), Hilt, DataStore; WorkManager, Glance widgets and Retrofit/OkHttp arrive in later phases.
+Stack: Kotlin, Jetpack Compose (Material 3), Room (source of truth), Hilt, DataStore, Retrofit/OkHttp with kotlinx.serialization, WorkManager; Glance widgets arrive in a later phase.
 
 ## Status
 
-Phases 0 (audit), 1 (Android foundation) and 2 (guest lists: items, editing, categories, tags, all offline) are complete and verified on an Android 16 emulator, including in airplane mode. Phase 3 (AppHub sign-in, sync and guest-to-account migration) is next and waits on backend inputs. See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for what was verified and what was not.
+Phases 0 (audit), 1 (Android foundation), 2 (guest lists, all offline) and 3 (AppHub sign-in, sync and guest-to-account migration) are implemented. Phase 3 is verified against fake AppHub servers (an in-memory one in the tests and a faithful Node one for the emulator) and **not yet against the real cloud AppHub**, which needs the owner to create the dev app (see [backend/apphub/README.md](backend/apphub/README.md)). See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for exactly what was verified and what was not.
 
 ## Requirements
 
@@ -22,6 +22,17 @@ Phases 0 (audit), 1 (Android foundation) and 2 (guest lists: items, editing, cat
 .\gradlew.bat lintDebug
 .\gradlew.bat connectedDebugAndroidTest   # needs an emulator or a device
 ```
+
+## Running against the fake AppHub
+
+Debug builds talk to `http://10.0.2.2:8787/` (the host machine as seen from the Android emulator; the fake serves `/{app}/...` with no `/apphub` prefix, which only the cloud server has), app `shoppinglistdev`. Start the fake server on the host first; it needs only Node 18 or newer and has no dependencies:
+
+```powershell
+node backend/apphub/fake-server/server.mjs --port 8787
+node backend/apphub/fake-server/smoke.mjs        # its own self-test
+```
+
+Point a debug build somewhere else with `-PSL_APPHUB_BASE_URL=... -PSL_APPHUB_APP=...`. Release builds use the cloud AppHub over HTTPS only.
 
 ## Release signing
 
@@ -39,12 +50,14 @@ SL_UPLOAD_KEY_PASSWORD=...
 ```
 app/src/main/kotlin/space/abhijithkm/shoppinglist/
   core/      model types, small utilities
-  data/      local (Room), repository (UI-facing Room + settings)
+  data/      local (Room), repository (UI-facing Room + settings),
+             remote (AppHub client), session (tokens), sync (engine, merge, migration, WorkManager)
   di/        Hilt modules
-  feature/   lists, categories, settings (one package per screen)
+  feature/   lists, categories, settings, account (one package per screen)
   ui/        theme and navigation shell
 app/schemas/ exported Room schema JSON (committed)
-docs/        audit, architecture, AppHub feasibility, plan, status
+backend/apphub/  the cloud app's definition (schema.sql, config) and the fake AppHub server; NOT applied anywhere
+docs/        audit, architecture, AppHub feasibility and integration, sync strategy, plan, status
 ```
 
 ## Documentation
@@ -54,6 +67,8 @@ docs/        audit, architecture, AppHub feasibility, plan, status
 - [Architecture proposal](docs/ARCHITECTURE_PROPOSAL.md)
 - [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
 - [Implementation status](docs/IMPLEMENTATION_STATUS.md)
+- [AppHub integration](docs/APPHUB_INTEGRATION.md)
+- [Sync strategy](docs/SYNC_STRATEGY.md)
 - [Local database schema](docs/DATABASE_SCHEMA.md)
 - [Testing](docs/TESTING.md)
 - [Changelog](CHANGELOG.md)

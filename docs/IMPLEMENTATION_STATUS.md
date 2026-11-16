@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-11-16 (Phase 2 complete). Each phase has its own completion report. A phase is complete only when its exit criteria are verified, not when it compiles.
+Last updated: 2026-11-16 (Phase 3 implemented, awaiting cloud verification). Each phase has its own completion report. A phase is complete only when its exit criteria are verified, not when it compiles.
 
 ## Phase 0 — Repository and AppHub audit: complete
 
@@ -127,6 +127,75 @@ Everything in product requirements A to F works with no account and no network. 
 - Install `outputs/apk/debug/app-debug.apk` only after `assembleDebug`; the connected-test task does not refresh it (I lost time testing a stale build).
 - The emulator is shut down when idle; restarting it takes about 2 minutes.
 
-## Phases 3 to 6
+## Phase 3 — AppHub sign-in, sync and guest-to-account migration: implemented; verified against fakes, NOT against the cloud (2026-11-16)
 
-Not started. Plan: [IMPLEMENTATION_PLAN](IMPLEMENTATION_PLAN.md). Backend track B0 (cloud dev app and validation spike) waits for the inputs listed in [PROJECT_AUDIT §8](PROJECT_AUDIT.md); Phase 3 (sign-in, sync, migration) cannot start until at least the dev app name and test accounts exist.
+**Status in one sentence:** everything Phase 3 asked for is built and tested end to end on an Android 16 emulator against a faithful fake AppHub, but the app does **not exist on the cloud AppHub yet** (the owner's AppHub admin shows five other apps), so nothing has been verified against the real server and the phase is **not closed**: closing it needs the cloud dev app (see "What is needed to close Phase 3").
+
+### Deliverables
+
+| Requirement | State | Where and evidence |
+|---|---|---|
+| Register, sign in, sign out, token refresh, account info | Done | `data/remote`, `data/session`; Settings, Account; 16 wire tests, 33 session and encryption tests; on the device: account created, signed in, kill and relaunch with no prompt (refresh used), sign-out |
+| Password recovery "if supported" | Request is Done; completing it is not | `auth/forgot` is called and a 404 ("not set up") is shown kindly. The reset link AppHub mails points to a page in the app's own web site, and the server's mail is unconfirmed, so the app has no screen for entering the reset token |
+| Secure session management | Done | refresh token AES-256-GCM in the Android Keystore (4 on-device tests), access token memory only, one mutex, persist-before-use, no redirects, redacted `toString`s, never auto-retried refresh; rules in [APPHUB_INTEGRATION §3](APPHUB_INTEGRATION.md) |
+| Auth requested only when a cloud feature is used | Done | nothing asks at launch; sign-in lives in Settings, Account; guest mode makes no network call |
+| Cloud sync with WorkManager | Done | in-process runs 2 s after a change, a network-constrained WorkManager retry when a run fails, a 30-minute periodic run; on the device: offline edits reached the server about 10 s after the connection returned with no interaction |
+| Pending operation tracking, sync status, last successful sync time | Done | dirty-row tracking (no separate outbox, see deviations); Settings shows "Up to date", "N changes are waiting to sync", "N could not be synced" with Retry, "Last synced 5 minutes ago", "merged N conflicting edits" |
+| Retries with exponential backoff | Done | per row 5 s, 30 s, 2 min, 10 min, 30 min then blocked after 3 failures (4xx blocks at once); run level: offline, 429 (`Retry-After`), 5xx stop the run; WorkManager backoff on top; an outage undoes the penalty its rows received |
+| Idempotency and duplicate prevention | Done | client UUIDs, 409 then fetch then merge, deterministic per-account ids for built-in category overrides, PATCH of fields only; tests: lost create answer, repeated migration |
+| Conflict detection and resolution | Done | field-level three-way merge against a stored base; same-field conflicts counted and shown, local wins (the server wins when its `updated_at_ms` is later and there is no base), delete always wins; limitation documented ([SYNC_STRATEGY §5.2](SYNC_STRATEGY.md)) |
+| Tombstones | Done | deletes sync as `deleted_at_ms`; undo syncs; guest tombstones purge after 7 days, account tombstones only once acknowledged; AppHub roles have no delete permission |
+| Guest-to-account migration | Done | per-list selection, name clashes flagged (never merged silently), optional custom categories and tags, nothing deleted, order, colours, tags, notes and bought state preserved, offline and repeated runs recoverable, a list moved back after a sign-out never overwrites newer server data or resurrects a server delete |
+| Sign-out and account switching | Done | sign-out keeps every list as guest data; a different account never sees the previous account's data (detached at sign-in and again at the start of each run) |
+| Docs | Done | [APPHUB_INTEGRATION](APPHUB_INTEGRATION.md), [SYNC_STRATEGY](SYNC_STRATEGY.md), [DATABASE_SCHEMA](DATABASE_SCHEMA.md) updated, README, CHANGELOG, [TESTING](TESTING.md) |
+
+### Verification (2026-11-16)
+
+| Check | Result |
+|---|---|
+| `gradlew testDebugUnitTest` | **Pass, 137 of 137** (the 64 from Phase 2, plus AppHub client 16, session and encryption 33, sync core 24) |
+| `gradlew connectedDebugAndroidTest` (Android 16 emulator) | **Pass, 121 of 121** (Phase 2: 62; new: sync engine 24, migration 9, account screens 21, Keystore 4, Room v1 to v2 migration 1) |
+| `gradlew lintDebug` | **Pass**, 0 errors, one warning (the intentional `OldTargetApi`) |
+| Fake server self-test (`node backend/apphub/fake-server/smoke.mjs`) | **245 passed, 0 failed**; the config passes AppHub's own validator |
+| Hands-on pass on the emulator against the Node fake | **Pass**: guest list created offline; account created and signed in from the app; first sync; migration sheet offered the list and moved it (list, two items, quantity, unit and order verified on the server); another device simulated through the API (rename, new item, new list) and pulled with Sync now; hard kill and relaunch stayed signed in (`auth/refresh` 200) and pushed the next edit; airplane mode: three edits showed "3 changes are waiting to sync", then reached the server about 10 s after the network returned, untouched; sign-out kept both lists as guest data |
+| Two independent reviews (security of the session code; correctness of the sync engine) | Both read-only; findings below, all fixed and covered by tests |
+
+### Defects found by verification and review, and fixed
+
+* **`MigrationRepository` read the session before it was restored** (3 instrumented tests failed): it now restores first.
+* **The emulator was still in airplane mode** from the Phase 2 offline check, so the first on-device sign-in correctly said "can't reach the server" (an unplanned check of that error path).
+* **The debug base URL was wrong** (`/apphub/` prefix only exists on the cloud server): found by the first real on-device request, fixed and documented.
+* Security review: a bare 401/403 from a proxy ended the session (now only AppHub's own error envelope does); a cancelled first `restore()` latched "signed out" for the process; failed token writes were ignored (now retried before the next handout, and a sign-in that cannot be stored clears the previous account's session); redirects could resend a password or one-time token; the authenticator could starve its own refresh call (own dispatcher); secrets in `toString` and in an exception cause; a temporary Keystore error was read as a lost key; double-tap started two logins; display name was not capped; a half-finished account switch is now finished at the start of every sync run.
+* Sync review (one high): **moving a stale detached list back into the account could overwrite newer server edits and resurrect a server delete**; now merged by the ordinary rules with `updated_at_ms` as the tie-break. Also: a created-then-deleted row is no longer purged without telling the server and Undo works for 15 seconds; items of a list deleted before a device arrived no longer pin the pull cursor; a tag that arrives late restores the links of items stored earlier; timestamps no longer depend on the device language; no page cap that could skip old rows; an outage that answers 500 no longer pushes rows towards "blocked"; editing a built-in category while signed in makes it the account's.
+
+### Deviations from the Phase 0 documents
+
+* **Dirty-row tracking instead of a `pending_ops` outbox.** A row is dirty when `revision > serverRevision` or it has no sync base; a `sync_entities` row stores the last-agreed server snapshot. Coalescing, field-level diffs and merge come free, and no repository method can forget to enqueue.
+* **No `item_tags` table in the cloud**: an item's tags travel as the JSON text column `tag_ids`.
+* **Two additions to the planned cloud contract**, made before anything was applied: `categories.builtin_key` (a global primary key made built-in overrides collide between accounts) and `updated_at_ms` on lists and items (cross-device "last updated").
+* **Debug builds point at the local fake server**, release builds at the cloud app; the app declares INTERNET and ACCESS_NETWORK_STATE.
+* **Room schema v2** by auto-migration, tested from a v1 database with data (the "edit v1 in place" shortcut of Phase 2 ended with the first sync tables).
+
+### What is NOT verified
+
+* **Anything on the real cloud AppHub.** The app (`shoppinglistdev`, `shoppinglist`) is not on it. The schema has never run on MySQL, the config has never been imported, and the real server's behaviour (error texts, 500 on a database refusal, `updated_at` handling, rate limits, whether mail works) is known only from AppHub's source and the fake's documented guesses ([fake-server README](../backend/apphub/fake-server/README.md)).
+* A physical device, an API 24 to 28 device, a release (R8) build, a very large account (thousands of rows), battery use of the periodic job.
+* Completing a password reset in the app, email verification, and a refresh whose answer is lost on the wire against the real server (it is tested against the fake with `drop_after`).
+
+### Known limitations
+
+* Two devices editing the **same field** offline: the last to sync wins and the other edit is lost once (counted and shown). Revision checks arrive with shared lists (Phase 4).
+* Same-named tags created on two devices stay two tags until one is deleted. A rename of a built-in category made as a guest stays local until moved.
+* No push: another device's change shows on the next run (app start, Sync now, a local change, or within 30 minutes).
+* There is no button for a full resync yet (`SyncRepository.fullResync` exists) and no banner on the Lists screen inviting guests to sign in; both are small follow-ups.
+* AppHub has no account deletion endpoint, so the app cannot offer "delete my account".
+
+### What is needed to close Phase 3
+
+1. The owner's go-ahead and the operator path to create the dev app on the cloud AppHub (`backend/apphub/README.md` has the runbook; the AppHub admin shows no Shopping List app today).
+2. Two test accounts, and an answer on whether the server can send mail.
+3. Run the client against `shoppinglistdev` (a debug build with `-PSL_APPHUB_BASE_URL=https://132-226-190-156.sslip.io/apphub/`) and record the result in the backend ledger.
+
+## Phases 4 to 6
+
+Not started. Plan: [IMPLEMENTATION_PLAN](IMPLEMENTATION_PLAN.md). Phase 4 (collaboration) additionally needs the validation spike of [APPHUB_FEASIBILITY §9](APPHUB_FEASIBILITY.md) and an operator path for installing database triggers.

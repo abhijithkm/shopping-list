@@ -27,6 +27,8 @@ It follows the method of `C:\MyApps\ReadRhythm\apphub\` (`README.md`, `provision
 
 Update this table whenever something is applied, with the date and who did it. Nothing is applied until a row says so.
 
+Observed 2026-11-16 (the owner's screenshot of the cloud AppHub admin, `/apphub/admin/#/apps`): five apps are registered (Fuel Tracker, Leave Tracker, ReadRhythm, Sample Shop, SubmitFlow) and **neither `shoppinglistdev` nor `shoppinglist` exists**, which matches the table below.
+
 | Item | Where | State | When and by whom | Checked by |
 |---|---|---|---|---|
 | Dry run of `schema.sql` on a throwaway database (5 tables, 10 CHECK constraints, 5 foreign keys) | cloud MySQL | not applied | | |
