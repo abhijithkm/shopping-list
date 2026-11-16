@@ -1,0 +1,38 @@
+# Gradle / Android build output
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.log
+hs_err_pid*
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Secrets and signing material - never commit
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+.env
+.env.*
+!.env.example
+secrets/
+**/google-services.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tooling
+.claude/settings.local.json
