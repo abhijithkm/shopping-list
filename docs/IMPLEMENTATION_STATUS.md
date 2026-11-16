@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-11-16. Each phase has its own completion report. A phase is complete only when its exit criteria are verified, not when it compiles.
+Last updated: 2026-11-16 (Phase 2 complete). Each phase has its own completion report. A phase is complete only when its exit criteria are verified, not when it compiles.
 
 ## Phase 0 — Repository and AppHub audit: complete
 
@@ -70,6 +70,63 @@ The Lists screen's "New list" floating button had **no accessible name**. The ic
 
 - **Backup policy.** App data is currently excluded from cloud backup and device transfer. Whether guest lists should survive a phone change (and therefore be backed up, with auth tokens still excluded) is a product decision for the owner.
 
-## Phases 2 to 6
+## Phase 2 — Guest shopping lists: complete (2026-11-16)
 
-Not started. Plan: [IMPLEMENTATION_PLAN](IMPLEMENTATION_PLAN.md). Backend track B0 (cloud dev app and validation spike) waits for the inputs listed in [PROJECT_AUDIT §8](PROJECT_AUDIT.md).
+Everything in product requirements A to F works with no account and no network. It was verified in **airplane mode** on an Android 16 emulator, including after killing the process.
+
+### Deliverables
+
+| Requirement | State | Notes |
+|---|---|---|
+| Lists: create, rename, edit colour and emoji icon, pin, archive and unarchive, delete with undo, search, sort (recent, name, newest; saved), counts, last updated | Done | "Shared" indicator arrives with collaboration (Phase 4) |
+| List detail: inline quick-add, edit item, delete with undo (swipe or edit sheet), bought and unbought, progress, completed section with a show/hide setting, clear completed with undo | Done | Quick-add parses `2 kg milk`, `500g sugar`, `Milk 2 litres`, `3 mangoes` and leaves `7up`, `2% milk` alone |
+| Quantity and unit (optional), notes (optional) | Done | Unit suggestions in the edit sheet |
+| Drag-and-drop ordering | Done | `sh.calvin.reorderable` 3.1.0; a drag rewrites one row (renumbering only when a gap is used up) |
+| Categories: 11 defaults, rename and recolour any of them (with reset), custom create and delete, assign, filter, group by category | Done | Built-ins stay fixed keys; renames and colours are override rows |
+| Tags: create inline, several per item, filter, rename and delete with duplicate protection | Done | Tag management lives on the Categories screen |
+| Search and filter items (name, category, tag) | Done | |
+| Settings: theme, show completed, list sort, group by category | Done | |
+| Local reminders, Android widgets | **Not in this phase** | Phase 5, as planned |
+
+### Verification (2026-11-16)
+
+| Check | Result |
+|---|---|
+| `gradlew testDebugUnitTest` | **Pass, 64 of 64** |
+| `gradlew connectedDebugAndroidTest` (Android 16 emulator) | **Pass, 62 of 62** (database 6, repository 18, Lists screen 10, list detail 17, categories and tags 11) |
+| `gradlew lintDebug` | **Pass**, 0 errors; one warning, the intentional `OldTargetApi` |
+| Manual device pass in airplane mode | **Pass**: edit list (name, colour, emoji); quick-add parsing; toggle to Completed; real drag reorder; real swipe delete and Undo; edit sheet with keyboard; grouped view; custom category; kill and relaunch with everything intact |
+
+### Defects found by verification and fixed
+
+- **Undo after a swipe-delete did not restore the item in place.** `rememberSwipeToDismissBoxState` is saved per lazy-list key, so the restored row came back already swiped away. Found on the device, reproduced by a new Compose regression test that failed first, fixed by resetting the swipe state once the delete is issued, and confirmed on the device with tracing (since removed).
+- **The edit sheet's Delete and Save buttons could be hidden by the keyboard.** They are now pinned below the scrolling fields.
+- Earlier in the phase: Compose v2 test-rule timing needed `waitForIdle()`; Windows DataStore tests allow one write per store; a stale on-disk database crashed app start after the schema changed (expected before release, and the startup cleanup is now guarded so it can never crash the app).
+- A test pass also caught an accessibility defect in Phase 1 (unnamed FAB), and the lesson was applied here: the Lists and Categories floating buttons use the content-slot overload.
+
+### Deviations and decisions
+
+- **Built-in category renames and colours are stored as override rows** (`categories.id` = the built-in key). The architecture doc said built-ins are never rows; they are still fixed keys, the row only carries the user's changes. Documented in [DATABASE_SCHEMA](DATABASE_SCHEMA.md).
+- **Room schema v1 was edited in place** (new tables and columns) because nothing has shipped; the exported schema JSON was regenerated. After the first public release every change needs a tested migration.
+- **Guest tombstones are purged after 7 days** at app start; cloud tombstones are kept until sync acknowledges them (Phase 3).
+- **List icons are emoji** from a small picker (no assets, works offline).
+- **Delete list lives on the Lists screen only**; the detail screen offers Archive (reversible), so there is no second place to delete a whole list without undo.
+- New docs: [DATABASE_SCHEMA](DATABASE_SCHEMA.md) and [TESTING](TESTING.md).
+
+### Known limitations
+
+- Deleting a category or a tag has no undo (the dialogs say what will happen). Item and list deletion do.
+- Drag handles have no keyboard or TalkBack alternative yet ("move up/down" actions); the accessibility pass in Phase 6 should add them. Swipe-delete has an accessible alternative (the edit sheet).
+- The quick-add parser knows English units only; strings are English only.
+- "Updated 5 minutes ago" does not tick while the screen stays open.
+- No automated drag-and-drop test; very large lists, cold-start time and battery are Phase 6 measurements.
+- Backup remains excluded (open decision from Phase 1).
+
+### Dev notes
+
+- Install `outputs/apk/debug/app-debug.apk` only after `assembleDebug`; the connected-test task does not refresh it (I lost time testing a stale build).
+- The emulator is shut down when idle; restarting it takes about 2 minutes.
+
+## Phases 3 to 6
+
+Not started. Plan: [IMPLEMENTATION_PLAN](IMPLEMENTATION_PLAN.md). Backend track B0 (cloud dev app and validation spike) waits for the inputs listed in [PROJECT_AUDIT §8](PROJECT_AUDIT.md); Phase 3 (sign-in, sync, migration) cannot start until at least the dev app name and test accounts exist.

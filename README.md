@@ -6,7 +6,7 @@ Stack: Kotlin, Jetpack Compose (Material 3), Room (source of truth), Hilt, DataS
 
 ## Status
 
-Phase 0 (audit) and Phase 1 (Android foundation) are complete and verified on an Android 16 emulator. Phase 2 (guest lists: items, editing, categories, tags) is next. See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for what was verified and what was not.
+Phases 0 (audit), 1 (Android foundation) and 2 (guest lists: items, editing, categories, tags, all offline) are complete and verified on an Android 16 emulator, including in airplane mode. Phase 3 (AppHub sign-in, sync and guest-to-account migration) is next and waits on backend inputs. See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for what was verified and what was not.
 
 ## Requirements
 
@@ -54,6 +54,8 @@ docs/        audit, architecture, AppHub feasibility, plan, status
 - [Architecture proposal](docs/ARCHITECTURE_PROPOSAL.md)
 - [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
 - [Implementation status](docs/IMPLEMENTATION_STATUS.md)
+- [Local database schema](docs/DATABASE_SCHEMA.md)
+- [Testing](docs/TESTING.md)
 - [Changelog](CHANGELOG.md)
 
 ## Privacy and secrets
