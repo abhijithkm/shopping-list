@@ -127,17 +127,17 @@ Everything in product requirements A to F works with no account and no network. 
 - Install `outputs/apk/debug/app-debug.apk` only after `assembleDebug`; the connected-test task does not refresh it (I lost time testing a stale build).
 - The emulator is shut down when idle; restarting it takes about 2 minutes.
 
-## Phase 3 — AppHub sign-in, sync and guest-to-account migration: implemented; verified against fakes, NOT against the cloud (2026-11-16)
+## Phase 3 — AppHub sign-in, sync and guest-to-account migration: complete, with listed gaps (2026-11-16)
 
-**Status in one sentence:** everything Phase 3 asked for is built and tested end to end on an Android 16 emulator against a faithful fake AppHub; the cloud dev app `shoppinglistdev` was created afterwards (2026-11-16, see below), so the schema and config now exist on the real server, but the **client has not yet been run against it**, so the phase is **not closed** (see "What is needed to close Phase 3").
+**Status in one sentence:** everything Phase 3 asked for is built, tested against a fake AppHub (in the tests and on an emulator) **and against the real cloud dev app `shoppinglistdev`**, where the real client stack passed its end-to-end test and the check found one production bug that no fake could (fixed). The gaps that remain are listed under "What is NOT verified"; the production app `shoppinglist` has not been created.
 
-**Cloud dev app (2026-11-16, after the report above was first written).** The owner's AppHub admin showed no Shopping List app, so with the owner's go-ahead the dev app was created through the admin panel in the owner's signed-in Chrome: database `shoppinglistdev` with the five tables of `schema.sql` (the first run of that file on the real MySQL, no errors), the app registered, `shoppinglist.config.json` saved through Settings, Advanced, and the panel's health check at 12 of 14 (the one warning: no users yet). Public sign-up answers as expected. Nothing was applied for the production app `shoppinglist`. The ledger in [backend/apphub/README.md](../backend/apphub/README.md) has the details.
+**Cloud dev app (2026-11-16).** The owner's AppHub admin showed no Shopping List app, so with the owner's go-ahead the dev app was created through the admin panel in the owner's signed-in Chrome: database `shoppinglistdev` with the five tables of `schema.sql` (the first run of that file on the real MySQL, no errors), the app registered, `shoppinglist.config.json` saved through Settings, Advanced, health check 12 of 14. With the owner's go-ahead two throwaway accounts were then registered on it (example.com addresses, generated passwords kept outside the repo) and the client was verified against it. The ledger in [backend/apphub/README.md](../backend/apphub/README.md) has the details and the differences found; the two accounts still have to be deleted in the panel (the roles cannot delete).
 
 ### Deliverables
 
 | Requirement | State | Where and evidence |
 |---|---|---|
-| Register, sign in, sign out, token refresh, account info | Done | `data/remote`, `data/session`; Settings, Account; 16 wire tests, 33 session and encryption tests; on the device: account created, signed in, kill and relaunch with no prompt (refresh used), sign-out |
+| Register, sign in, sign out, token refresh, account info | Done | `data/remote`, `data/session`; Settings, Account; 18 wire tests, 34 session and encryption tests; on the device: account created, signed in, kill and relaunch with no prompt (refresh used), sign-out |
 | Password recovery "if supported" | Request is Done; completing it is not | `auth/forgot` is called and a 404 ("not set up") is shown kindly. The reset link AppHub mails points to a page in the app's own web site, and the server's mail is unconfirmed, so the app has no screen for entering the reset token |
 | Secure session management | Done | refresh token AES-256-GCM in the Android Keystore (4 on-device tests), access token memory only, one mutex, persist-before-use, no redirects, redacted `toString`s, never auto-retried refresh; rules in [APPHUB_INTEGRATION §3](APPHUB_INTEGRATION.md) |
 | Auth requested only when a cloud feature is used | Done | nothing asks at launch; sign-in lives in Settings, Account; guest mode makes no network call |
@@ -155,16 +155,19 @@ Everything in product requirements A to F works with no account and no network. 
 
 | Check | Result |
 |---|---|
-| `gradlew testDebugUnitTest` | **Pass, 137 of 137** (the 64 from Phase 2, plus AppHub client 16, session and encryption 33, sync core 24) |
-| `gradlew connectedDebugAndroidTest` (Android 16 emulator) | **Pass, 121 of 121** (Phase 2: 62; new: sync engine 24, migration 9, account screens 21, Keystore 4, Room v1 to v2 migration 1) |
+| `gradlew testDebugUnitTest` | **Pass, 140 of 140** (the 64 from Phase 2, plus AppHub client 18, session and encryption 34, sync core 24) |
+| `gradlew connectedDebugAndroidTest` (Android 16 emulator) | **Pass, 122 of 122** (Phase 2: 62; new: sync engine 25, migration 9, account screens 21, Keystore 4, Room v1 to v2 migration 1) plus 3 opt-in cloud tests that are skipped without credentials (they passed against the cloud dev app, below) |
 | `gradlew lintDebug` | **Pass**, 0 errors, one warning (the intentional `OldTargetApi`) |
 | Fake server self-test (`node backend/apphub/fake-server/smoke.mjs`) | **245 passed, 0 failed**; the config passes AppHub's own validator |
 | Hands-on pass on the emulator against the Node fake | **Pass**: guest list created offline; account created and signed in from the app; first sync; migration sheet offered the list and moved it (list, two items, quantity, unit and order verified on the server); another device simulated through the API (rename, new item, new list) and pulled with Sync now; hard kill and relaunch stayed signed in (`auth/refresh` 200) and pushed the next edit; airplane mode: three edits showed "3 changes are waiting to sync", then reached the server about 10 s after the network returned, untouched; sign-out kept both lists as guest data |
 | Two independent reviews (security of the session code; correctness of the sync engine) | Both read-only; findings below, all fixed and covered by tests |
+| **Real cloud dev app**, protocol script (`shoppinglistdev`, two throwaway accounts) | **43 checks passed**: sign-up rules, login, refresh rotation and reuse detection, column types, PATCH semantics, 422/409/403, paging and sorting, account isolation, database refusals are 500; the 6 early "failures" were the real auth rate limit (429) |
+| **Real cloud dev app**, `CloudDevAppTest` on the emulator (real client stack) | **3 of 3 passed**: upload, pull on a second device, field merge, same-field conflict, delete and undo, a real refresh-token rotation, guest-list migration |
 
 ### Defects found by verification and review, and fixed
 
 * **`MigrationRepository` read the session before it was restored** (3 instrumented tests failed): it now restores first.
+* **Found only against the real cloud: idle keep-alive connections.** The server closes idle connections after a few seconds, and the auth client has no automatic retry (a resend of a one-time refresh token could end the session), so the first sign-in or refresh after a pause failed as a false "can't reach the server". Auth calls now use a fresh connection each time (`AppHubHttp.authClient`); data calls retry dropped pooled connections (idempotent). A second real-server finding: an account can hold two override rows for one built-in category (made by other software); the client now trusts only the account's deterministic id.
 * **The emulator was still in airplane mode** from the Phase 2 offline check, so the first on-device sign-in correctly said "can't reach the server" (an unplanned check of that error path).
 * **The debug base URL was wrong** (`/apphub/` prefix only exists on the cloud server): found by the first real on-device request, fixed and documented.
 * Security review: a bare 401/403 from a proxy ended the session (now only AppHub's own error envelope does); a cancelled first `restore()` latched "signed out" for the process; failed token writes were ignored (now retried before the next handout, and a sign-in that cannot be stored clears the previous account's session); redirects could resend a password or one-time token; the authenticator could starve its own refresh call (own dispatcher); secrets in `toString` and in an exception cause; a temporary Keystore error was read as a lost key; double-tap started two logins; display name was not capped; a half-finished account switch is now finished at the start of every sync run.
@@ -180,9 +183,9 @@ Everything in product requirements A to F works with no account and no network. 
 
 ### What is NOT verified
 
-* **The client against the real cloud AppHub.** The dev app exists now (the schema loaded on the cloud MySQL and the config was accepted), but no account has been registered and no request of the app has been sent to it. The real server's behaviour (error texts, 500 on a database refusal, `updated_at` handling and time zone, rate limits, whether mail works) is still known only from AppHub's source and the fake's documented guesses ([fake-server README](../backend/apphub/fake-server/README.md)).
+* **The screens driven by hand against the cloud.** The real client stack was tested against the cloud dev app through `CloudDevAppTest` (no UI), and the screens by hand against the fake; typing a password into the Account sheet against the cloud was not done.
+* The **production app** `shoppinglist` (not created), the real server's mail (password reset answers 404, so completing a reset and email verification are untested), and the real server's behaviour under a lost refresh answer (tested against the fake with `drop_after`).
 * A physical device, an API 24 to 28 device, a release (R8) build, a very large account (thousands of rows), battery use of the periodic job.
-* Completing a password reset in the app, email verification, and a refresh whose answer is lost on the wire against the real server (it is tested against the fake with `drop_after`).
 
 ### Known limitations
 
@@ -192,11 +195,11 @@ Everything in product requirements A to F works with no account and no network. 
 * There is no button for a full resync yet (`SyncRepository.fullResync` exists) and no banner on the Lists screen inviting guests to sign in; both are small follow-ups.
 * AppHub has no account deletion endpoint, so the app cannot offer "delete my account".
 
-### What is needed to close Phase 3
+### Left for the owner
 
-1. ~~The cloud dev app~~ (done 2026-11-16).
-2. The owner's go-ahead to register two throwaway test accounts on `shoppinglistdev` (a registration creates a real account on the cloud app; they are removed afterwards), and an answer on whether the server can send mail.
-3. Run the client against `shoppinglistdev` (a debug build with `-PSL_APPHUB_BASE_URL=https://132-226-190-156.sslip.io/apphub/`) and record the result in the backend ledger.
+1. Delete the two throwaway accounts (`slverify-a-75794793@example.com`, `slverify-b-75794793@example.com`) from the dev app's Users tab in the AppHub admin; their rows go with them.
+2. Say whether the server can send mail (password reset and email verification depend on it) and when to create the production app `shoppinglist` from the same files.
+3. Optionally try the app by hand against the dev app: a debug build with `-PSL_APPHUB_BASE_URL=https://132-226-190-156.sslip.io/apphub/` and a throwaway account of your own.
 
 ## Phases 4 to 6
 

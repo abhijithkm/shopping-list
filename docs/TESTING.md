@@ -1,6 +1,6 @@
 # Testing
 
-Status: reflects Phase 3 (2026-11-16). Counts are from the last full run: **137 unit tests and 121 instrumented tests, all passing; lint 0 errors**. The fake AppHub server has its own 245-check self-test (`node backend/apphub/fake-server/smoke.mjs`).
+Status: reflects Phase 3 (2026-11-16). Counts are from the last full run: **140 unit tests and 122 instrumented tests, all passing, plus 3 opt-in cloud tests (skipped without credentials); lint 0 errors**. The fake AppHub server has its own 245-check self-test (`node backend/apphub/fake-server/smoke.mjs`).
 
 ## How to run
 
@@ -51,6 +51,21 @@ Run Gradle from PowerShell or cmd on Windows (not Git Bash). JDK 17 must be in `
 7. Group by category, create a custom category, switch theme.
 
 Emulator notes (stylus tutorial, memory, `adb` path conversion in Git Bash) are in [IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md).
+
+## Against a real AppHub app (opt-in)
+
+`CloudDevAppTest` runs the real client stack (session, refresh, sync engine, merge, migration) on the emulator against an AppHub app. It is skipped unless credentials are passed, so no secret is ever in the repository. Use a **throwaway account on a dev app**: the roles have no delete permission, so the rows stay until an admin deletes the user.
+
+```powershell
+.\gradlew.bat connectedDebugAndroidTest `
+  "-Pandroid.testInstrumentationRunnerArguments.class=space.abhijithkm.shoppinglist.data.sync.CloudDevAppTest" `
+  "-Pandroid.testInstrumentationRunnerArguments.cloudBaseUrl=https://132-226-190-156.sslip.io/apphub/" `
+  "-Pandroid.testInstrumentationRunnerArguments.cloudApp=shoppinglistdev" `
+  "-Pandroid.testInstrumentationRunnerArguments.cloudEmail=<throwaway address>" `
+  "-Pandroid.testInstrumentationRunnerArguments.cloudPassword=<its password>"
+```
+
+AppHub allows about 10 auth calls a minute per IP (429 beyond that), so the test waits seven seconds before every sign-in and refresh. Read the password from a local file into a variable instead of typing it in a command that ends up in a transcript.
 
 ## Manual device checklist for sign-in and sync (Phase 3)
 
