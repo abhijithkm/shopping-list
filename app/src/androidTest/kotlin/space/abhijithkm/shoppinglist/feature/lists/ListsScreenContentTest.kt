@@ -39,6 +39,7 @@ class ListsScreenContentTest {
         composeRule.setContent {
             ShoppingListTheme { ListsScreenContent(ListsUiState(isLoading = false), onCreateList = {}) }
         }
+        composeRule.waitForIdle() // v2 rule queues composition on a StandardTestDispatcher
         composeRule.onNodeWithTag("lists_empty").assertIsDisplayed()
     }
 
@@ -46,6 +47,7 @@ class ListsScreenContentTest {
     fun showsOneCardPerListWithProgressText() {
         val state = ListsUiState(listOf(summary("a", total = 6, bought = 2), summary("b", 0, 0)), isLoading = false)
         composeRule.setContent { ShoppingListTheme { ListsScreenContent(state, onCreateList = {}) } }
+        composeRule.waitForIdle()
 
         composeRule.onAllNodesWithTag("list_card").assertCountEquals(2)
         composeRule.onNodeWithText(context.getString(R.string.list_progress, 2, 6)).assertIsDisplayed()
@@ -60,6 +62,7 @@ class ListsScreenContentTest {
                 ListsScreenContent(ListsUiState(isLoading = false), onCreateList = { created = it })
             }
         }
+        composeRule.waitForIdle()
 
         composeRule.onNodeWithText(context.getString(R.string.create_list)).performClick()
         composeRule.onNodeWithTag("list_name_input").performTextInput("Weekend")
