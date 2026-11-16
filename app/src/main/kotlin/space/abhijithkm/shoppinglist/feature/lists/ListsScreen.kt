@@ -461,7 +461,7 @@ private fun ListBadge(list: ListSummary) {
 }
 
 @Composable
-private fun ListEditDialog(
+internal fun ListEditDialog(
     title: String,
     confirmLabel: String,
     initialName: String,

@@ -1,5 +1,6 @@
 package space.abhijithkm.shoppinglist.ui.components
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -29,6 +30,27 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import space.abhijithkm.shoppinglist.R
+import space.abhijithkm.shoppinglist.core.model.Category
+import space.abhijithkm.shoppinglist.core.model.DefaultCategory
+
+@StringRes
+fun DefaultCategory.labelRes(): Int = when (this) {
+    DefaultCategory.VEGETABLES -> R.string.category_vegetables
+    DefaultCategory.FRUITS -> R.string.category_fruits
+    DefaultCategory.DAIRY -> R.string.category_dairy
+    DefaultCategory.MEAT_FISH -> R.string.category_meat_fish
+    DefaultCategory.BAKERY -> R.string.category_bakery
+    DefaultCategory.GROCERIES -> R.string.category_groceries
+    DefaultCategory.BEVERAGES -> R.string.category_beverages
+    DefaultCategory.HOUSEHOLD -> R.string.category_household
+    DefaultCategory.PERSONAL_CARE -> R.string.category_personal_care
+    DefaultCategory.MEDICINES -> R.string.category_medicines
+    DefaultCategory.OTHERS -> R.string.category_others
+}
+
+/** The user's own name for the category, or the built-in label. */
+@Composable
+fun Category.displayName(): String = name ?: defaultCategory?.let { stringResource(it.labelRes()) }.orEmpty()
 
 /** Colours offered for lists and custom categories (ARGB). */
 val PickerColors: List<Int> = listOf(

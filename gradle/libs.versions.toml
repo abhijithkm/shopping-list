@@ -16,6 +16,7 @@ coroutines = "1.11.0"
 junit = "4.13.2"
 turbine = "1.2.1"
 mockk = "1.14.12"
+reorderable = "3.1.0"
 androidxTestRunner = "1.7.0"
 androidxTestExtJunit = "1.3.0"
 
@@ -47,6 +48,7 @@ hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hilt"
 hilt-compiler = { module = "com.google.dagger:hilt-compiler", version.ref = "hilt" }
 androidx-hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
 
+reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 

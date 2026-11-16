@@ -17,18 +17,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import space.abhijithkm.shoppinglist.R
 import space.abhijithkm.shoppinglist.feature.categories.CategoriesScreen
+import space.abhijithkm.shoppinglist.feature.listdetail.ListDetailScreen
 import space.abhijithkm.shoppinglist.feature.lists.ListsScreen
 import space.abhijithkm.shoppinglist.feature.settings.SettingsScreen
 
 const val ROUTE_LISTS = "lists"
 const val ROUTE_CATEGORIES = "categories"
 const val ROUTE_SETTINGS = "settings"
+const val ROUTE_LIST_DETAIL = "list/{listId}"
+
+fun listDetailRoute(listId: String) = "list/$listId"
+
+/** The bottom bar is only shown on these; the list detail screen uses the full height. */
+private val TOP_LEVEL_ROUTES = setOf(ROUTE_LISTS, ROUTE_CATEGORIES, ROUTE_SETTINGS)
 
 /**
  * Screens own their top bars and the shell owns the bottom bar, so nested Scaffolds must not each
@@ -62,7 +71,7 @@ fun AppNavHost() {
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
+            if (currentRoute in TOP_LEVEL_ROUTES) NavigationBar {
                 topLevelDestinations.forEach { destination ->
                     NavigationBarItem(
                         selected = currentRoute == destination.route,
@@ -86,7 +95,15 @@ fun AppNavHost() {
             startDestination = ROUTE_LISTS,
             modifier = Modifier.padding(innerPadding),
         ) {
-            composable(ROUTE_LISTS) { ListsScreen() }
+            composable(ROUTE_LISTS) {
+                ListsScreen(onOpenList = { listId -> navController.navigate(listDetailRoute(listId)) })
+            }
+            composable(
+                route = ROUTE_LIST_DETAIL,
+                arguments = listOf(navArgument("listId") { type = NavType.StringType }),
+            ) {
+                ListDetailScreen(onBack = { navController.popBackStack() })
+            }
             composable(ROUTE_CATEGORIES) { CategoriesScreen() }
             composable(ROUTE_SETTINGS) { SettingsScreen() }
         }
