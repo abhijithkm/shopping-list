@@ -10,6 +10,7 @@ import space.abhijithkm.shoppinglist.core.model.DefaultCategory
 import space.abhijithkm.shoppinglist.core.model.Item
 import space.abhijithkm.shoppinglist.core.model.ItemUpdate
 import space.abhijithkm.shoppinglist.core.model.Limits
+import space.abhijithkm.shoppinglist.core.model.ListOrigin
 import space.abhijithkm.shoppinglist.core.model.ListSummary
 import space.abhijithkm.shoppinglist.core.model.Tag
 import space.abhijithkm.shoppinglist.core.util.Clock
@@ -38,11 +39,13 @@ class LocalShoppingRepository @Inject constructor(
     private val db: AppDatabase,
     private val clock: Clock,
     private val idGenerator: IdGenerator,
+    private val accountScope: AccountScope = AccountScope.Guest,
 ) {
     private val lists = db.listDao()
     private val items = db.itemDao()
     private val categories = db.categoryDao()
     private val tags = db.tagDao()
+    private val sync = db.syncDao()
 
     // ---------------------------------------------------------------- lists
 
@@ -52,14 +55,20 @@ class LocalShoppingRepository @Inject constructor(
     fun observeList(id: String): Flow<ListSummary?> =
         lists.observeOneWithCounts(id).map { it?.toSummary() }
 
-    /** Creates a local (guest) list and returns its id. */
+    /** How many lists exist only on this device (not in any account). */
+    fun observeGuestListCount(): Flow<Int> = lists.observeGuestListCount()
+
+    /** Creates a list and returns its id: a guest list while signed out, an account list (synced) while signed in. */
     suspend fun createList(name: String, color: Int? = null, icon: String? = null): String {
         val cleaned = requireName(name, Limits.LIST_NAME, "List name")
         val now = clock.nowMillis()
         val id = idGenerator.newId()
+        val account = accountScope.activeAccountId()
         lists.upsert(
             ShoppingListEntity(
                 id = id,
+                accountId = account,
+                origin = if (account != null) ListOrigin.CLOUD else ListOrigin.LOCAL,
                 name = cleaned,
                 icon = cleanIcon(icon),
                 color = color,
@@ -251,6 +260,7 @@ class LocalShoppingRepository @Inject constructor(
         categories.upsert(
             CategoryEntity(
                 id = id,
+                accountId = accountScope.activeAccountId(),
                 name = cleaned,
                 color = color ?: DEFAULT_CUSTOM_CATEGORY_COLOR,
                 createdAt = now,
@@ -270,9 +280,16 @@ class LocalShoppingRepository @Inject constructor(
         db.withTransaction {
             val existing = categories.getById(id)?.takeIf { it.deletedAt == null }
             if (DefaultCategory.fromKey(id) == null && existing == null) return@withTransaction
-            val base = existing ?: CategoryEntity(id = id, createdAt = now, updatedAt = now)
+            val base = existing ?: CategoryEntity(
+                id = id,
+                accountId = accountScope.activeAccountId(),
+                createdAt = now,
+                updatedAt = now,
+            )
             categories.upsert(
                 base.copy(
+                    // Editing while signed in makes the category the account's, so the edit is not left stranded as guest data.
+                    accountId = accountScope.activeAccountId() ?: base.accountId,
                     name = cleanedName ?: existing?.name,
                     color = color ?: existing?.color,
                     updatedAt = now,
@@ -305,7 +322,15 @@ class LocalShoppingRepository @Inject constructor(
         val now = clock.nowMillis()
         return db.withTransaction {
             tags.findByName(cleaned)?.id ?: idGenerator.newId().also { id ->
-                tags.upsert(TagEntity(id = id, name = cleaned, createdAt = now, updatedAt = now))
+                tags.upsert(
+                    TagEntity(
+                        id = id,
+                        accountId = accountScope.activeAccountId(),
+                        name = cleaned,
+                        createdAt = now,
+                        updatedAt = now,
+                    ),
+                )
             }
         }
     }
@@ -329,19 +354,30 @@ class LocalShoppingRepository @Inject constructor(
         val now = clock.nowMillis()
         db.withTransaction {
             tags.softDelete(id, now)
+            // The tag set of every item that carried it changes, so those items sync again.
+            items.bumpItemsOfTag(id, now)
             items.deleteLinksForTag(id)
         }
     }
 
     // ---------------------------------------------------------- housekeeping
 
-    /** Permanently removes guest-data tombstones older than [cutoffMillis] (the undo window is long over). */
+    /**
+     * Permanently removes tombstones older than [cutoffMillis] (the undo window is long over). Guest tombstones go
+     * as soon as they expire; account tombstones only once the server has acknowledged them (not dirty), so a
+     * delete that has not synced yet is never forgotten.
+     */
     suspend fun purgeExpiredTombstones(cutoffMillis: Long) {
         db.withTransaction {
             items.purgeLocalTombstones(cutoffMillis)
             lists.purgeLocalTombstones(cutoffMillis)
             categories.purgeTombstones(cutoffMillis)
             tags.purgeTombstones(cutoffMillis)
+            items.purgeSyncedTombstones(cutoffMillis)
+            lists.purgeSyncedTombstones(cutoffMillis)
+            categories.purgeSyncedTombstones(cutoffMillis)
+            tags.purgeSyncedTombstones(cutoffMillis)
+            sync.deleteOrphanEntities()
         }
     }
 

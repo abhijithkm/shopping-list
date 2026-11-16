@@ -109,6 +109,46 @@ data class TagEntity(
     val deletedAt: Long? = null,
 )
 
+/**
+ * Sync bookkeeping for one synced row (docs/SYNC_STRATEGY.md). [base] is the canonical JSON of the synced
+ * fields as the server last agreed on them: it is the common ancestor for the field-level diff (what to
+ * push) and the three-way merge (what to keep when the server changed too). A null [base] means the row
+ * has never reached the server (a create is pending). Rows are *dirty* when `revision > serverRevision`
+ * or when they belong to an account but have no [base].
+ */
+@Entity(tableName = "sync_entities", primaryKeys = ["type", "id"])
+data class SyncEntityEntity(
+    /** One of [SyncType]. */
+    val type: String,
+    /** The local id of the list, item, category or tag. */
+    val id: String,
+    val base: String? = null,
+    val failCount: Int = 0,
+    /** Epoch ms before which the engine does not retry this row (per-row backoff). */
+    val nextAttemptAt: Long = 0,
+    val lastError: String? = null,
+    /** Failed too often for the same content: waits until the row is edited again or the user taps Retry. */
+    val blocked: Boolean = false,
+    /** The row's revision when it was blocked; a higher revision means a new edit, so it is tried again. */
+    val blockedAtRevision: Int = 0,
+)
+
+/** Small key-value store for sync cursors and the last run summary, per account. */
+@Entity(tableName = "sync_state", primaryKeys = ["accountId", "key"])
+data class SyncStateEntity(
+    val accountId: String,
+    val key: String,
+    val value: String,
+)
+
+/** Values of [SyncEntityEntity.type]. */
+object SyncType {
+    const val LIST = "list"
+    const val ITEM = "item"
+    const val CATEGORY = "category"
+    const val TAG = "tag"
+}
+
 /** Many-to-many link between items and tags. [listId] is denormalised for list-scoped sync later. */
 @Entity(
     tableName = "item_tags",

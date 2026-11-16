@@ -3,6 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
     alias(libs.plugins.room)
@@ -43,8 +44,27 @@ android {
         }
     }
 
+    // AppHub endpoints are public values (no secrets). Debug builds talk to the local fake AppHub
+    // (backend/apphub/fake-server, reachable from the emulator as 10.0.2.2; it serves /{app}/... with no
+    // /apphub prefix) unless -PSL_APPHUB_BASE_URL points elsewhere (a cloud dev app would be
+    // https://132-226-190-156.sslip.io/apphub/); release builds talk to the cloud AppHub.
+    // The base URL must end with "/".
     buildTypes {
+        debug {
+            buildConfigField(
+                "String",
+                "APPHUB_BASE_URL",
+                "\"${providers.gradleProperty("SL_APPHUB_BASE_URL").getOrElse("http://10.0.2.2:8787/")}\"",
+            )
+            buildConfigField(
+                "String",
+                "APPHUB_APP",
+                "\"${providers.gradleProperty("SL_APPHUB_APP").getOrElse("shoppinglistdev")}\"",
+            )
+        }
         release {
+            buildConfigField("String", "APPHUB_BASE_URL", "\"https://132-226-190-156.sslip.io/apphub/\"")
+            buildConfigField("String", "APPHUB_APP", "\"shoppinglist\"")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -73,6 +93,11 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+
+    // The exported Room schemas are test assets so migrations can be tested from a real old database.
+    sourceSets {
+        getByName("androidTest").assets.directories.add("$projectDir/schemas")
     }
 }
 
@@ -109,6 +134,15 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
 
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
+
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.kotlinx.serialization)
+    implementation(libs.okhttp)
+    implementation(libs.kotlinx.serialization.json)
+
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.reorderable)
 
@@ -119,6 +153,8 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
     testImplementation(libs.mockk)
+    testImplementation(libs.mockwebserver3)
+    testImplementation(libs.androidx.work.testing)
 
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
@@ -126,6 +162,7 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.room.testing)
     androidTestImplementation(libs.kotlinx.coroutines.test)
+    androidTestImplementation(libs.mockwebserver3)
 }
 
 // Refuse unsigned/debug-signed release artifacts: a missing key must fail the build loudly.

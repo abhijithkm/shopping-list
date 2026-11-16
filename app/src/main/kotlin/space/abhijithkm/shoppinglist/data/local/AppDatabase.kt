@@ -1,12 +1,16 @@
 package space.abhijithkm.shoppinglist.data.local
 
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.RoomDatabase
 
 /**
- * Local source of truth. Schema JSON is exported to app/schemas and committed. The schema stays at
- * version 1 until the first public release; after that every change needs a tested migration
- * (never a destructive fallback).
+ * Local source of truth. Schema JSON is exported to app/schemas and committed. Every schema change
+ * needs a migration that is tested on a device (never a destructive fallback).
+ *
+ *  - v1: lists, items, categories, tags, item_tags (Phases 1 and 2).
+ *  - v2: sync bookkeeping, `sync_entities` and `sync_state` (Phase 3). Added tables only, so Room can
+ *    generate the migration.
  */
 @Database(
     entities = [
@@ -15,9 +19,12 @@ import androidx.room.RoomDatabase
         CategoryEntity::class,
         TagEntity::class,
         ItemTagCrossRef::class,
+        SyncEntityEntity::class,
+        SyncStateEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
+    autoMigrations = [AutoMigration(from = 1, to = 2)],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun listDao(): ShoppingListDao
@@ -27,4 +34,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun categoryDao(): CategoryDao
 
     abstract fun tagDao(): TagDao
+
+    abstract fun syncDao(): SyncDao
 }
