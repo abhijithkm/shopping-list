@@ -12,3 +12,7 @@ All notable changes to this project are recorded here. Format based on [Keep a C
 - Lists screen with live item counts and a create-list dialog; read-only default categories; settings screen.
 - Unit tests (13) and instrumented test sources for the database and the Lists screen.
 - Release signing that refuses to build without an upload key.
+- Verified on an Android 16 (API 36) emulator: 13 unit tests, 9 instrumented tests, install and launch, list and theme persistence across a process kill.
+
+### Fixed
+- The "New list" button had no accessible name for screen readers; it now exposes its label.

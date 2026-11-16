@@ -6,7 +6,7 @@ Stack: Kotlin, Jetpack Compose (Material 3), Room (source of truth), Hilt, DataS
 
 ## Status
 
-Phase 0 (audit) is approved. Phase 1 (Android foundation) is code-complete; running it on an emulator is still pending. See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for what is done, what was verified and what is not.
+Phase 0 (audit) and Phase 1 (Android foundation) are complete and verified on an Android 16 emulator. Phase 2 (guest lists: items, editing, categories, tags) is next. See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for what was verified and what was not.
 
 ## Requirements
 
