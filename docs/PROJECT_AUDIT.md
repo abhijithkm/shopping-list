@@ -87,7 +87,7 @@ Conclusion: the cloud deployment's documented surface and SDK are byte-identical
 | Hilt / hilt-navigation-compose / hilt-work | 2.60.1 / 1.4.0 / 1.4.0 | |
 | KSP | 2.3.14 | |
 | Kotlin | 2.4.21 | 2.5 is RC |
-| AGP | 9.5.1 stable | **Risk:** AGP 9 changed built-in Kotlin/KSP handling. Phase 1 starts with a throw-away compatibility spike (AGP × Kotlin × KSP × Hilt × Room). Fallback: latest AGP 8.x |
+| AGP | 9.5.1 stable | Needs **Gradle 9.9.1** (9.4.1 fails). Phase 1 compatibility spike **passed** with Kotlin 2.4.21, KSP, Hilt and Room; no fallback to AGP 8 was needed |
 | Retrofit / OkHttp | 3.0.0 / 5.5.1 | Retrofit 3's first-party kotlinx-serialization converter to be confirmed in the spike |
 | kotlinx-serialization-json / coroutines | 1.13.0 / 1.11.0 | |
 | `sh.calvin.reorderable` | 3.1.0 | Third-party; needed because LazyColumn has no stable reorder API. The only non-Google/Square/JetBrains UI library proposed |
@@ -95,7 +95,7 @@ Conclusion: the cloud deployment's documented surface and SDK are byte-identical
 
 Deliberately **not** used: `androidx.security:security-crypto` (reported deprecated; AppHub's own Android guide recommends DataStore plus a Keystore key) and Firebase of any kind.
 
-SDK levels: `minSdk 24` (spec); `compileSdk` and `targetSdk` **36**. Google Play's policy page lists Android 16 (API 36) as the target for new apps and updates from 2026-08-31. Re-check the Play Console policy at release time (Phase 6).
+SDK levels: `minSdk 24` (spec); `compileSdk` **37** (required by the current stable AndroidX libraries; found in Phase 1) and `targetSdk` **36**. Google Play's policy page lists Android 16 (API 36) as the target for new apps and updates from 2026-08-31. Re-check the Play Console policy at release time (Phase 6).
 
 ## 7. Risk register (project level)
 
