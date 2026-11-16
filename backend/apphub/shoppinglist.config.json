@@ -1,0 +1,173 @@
+{
+    "jwt": {
+        "access_ttl": 900,
+        "refresh_ttl": 1209600
+    },
+    "cors_origins": [],
+    "api_keys": [],
+    "auth": {
+        "table": "users",
+        "id": "id",
+        "email": "email",
+        "password": "password",
+        "role": "role",
+        "status": "status",
+        "active_value": "active",
+        "default_role": "user",
+        "allow_register": true,
+        "register_fields": [
+            "display_name"
+        ],
+        "password_min": 10
+    },
+    "uploads": {
+        "enabled": false
+    },
+    "tables": {
+        "users": {
+            "pk": "id",
+            "hidden": [],
+            "writable": [
+                "display_name"
+            ],
+            "searchable": [],
+            "sortable": [
+                "id"
+            ],
+            "filterable": []
+        },
+        "shopping_lists": {
+            "pk": "id",
+            "owner": "user_id",
+            "hidden": [],
+            "writable": [
+                "id",
+                "name",
+                "description",
+                "icon",
+                "color",
+                "is_archived",
+                "is_pinned",
+                "sort_key",
+                "created_at_ms",
+                "updated_at_ms",
+                "deleted_at_ms"
+            ],
+            "searchable": [],
+            "sortable": [
+                "id",
+                "updated_at",
+                "created_at_ms"
+            ],
+            "filterable": [
+                "id"
+            ]
+        },
+        "shopping_items": {
+            "pk": "id",
+            "owner": "user_id",
+            "hidden": [],
+            "writable": [
+                "id",
+                "list_id",
+                "name",
+                "quantity",
+                "unit",
+                "category_key",
+                "notes",
+                "is_bought",
+                "bought_at_ms",
+                "sort_order",
+                "tag_ids",
+                "created_at_ms",
+                "updated_at_ms",
+                "deleted_at_ms"
+            ],
+            "searchable": [],
+            "sortable": [
+                "id",
+                "updated_at",
+                "created_at_ms"
+            ],
+            "filterable": [
+                "id",
+                "list_id"
+            ]
+        },
+        "categories": {
+            "pk": "id",
+            "owner": "user_id",
+            "hidden": [],
+            "writable": [
+                "id",
+                "builtin_key",
+                "name",
+                "color",
+                "created_at_ms",
+                "deleted_at_ms"
+            ],
+            "searchable": [],
+            "sortable": [
+                "id",
+                "updated_at",
+                "created_at_ms"
+            ],
+            "filterable": [
+                "id",
+                "builtin_key"
+            ]
+        },
+        "tags": {
+            "pk": "id",
+            "owner": "user_id",
+            "hidden": [],
+            "writable": [
+                "id",
+                "name",
+                "created_at_ms",
+                "deleted_at_ms"
+            ],
+            "searchable": [],
+            "sortable": [
+                "id",
+                "updated_at",
+                "created_at_ms"
+            ],
+            "filterable": [
+                "id"
+            ]
+        }
+    },
+    "roles": {
+        "user": {
+            "users": {
+                "read": "own",
+                "update": "own"
+            },
+            "shopping_lists": {
+                "list": "own",
+                "read": "own",
+                "create": "own",
+                "update": "own"
+            },
+            "shopping_items": {
+                "list": "own",
+                "read": "own",
+                "create": "own",
+                "update": "own"
+            },
+            "categories": {
+                "list": "own",
+                "read": "own",
+                "create": "own",
+                "update": "own"
+            },
+            "tags": {
+                "list": "own",
+                "read": "own",
+                "create": "own",
+                "update": "own"
+            }
+        }
+    }
+}
