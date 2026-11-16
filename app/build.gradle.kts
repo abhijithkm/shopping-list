@@ -20,7 +20,8 @@ val hasUploadKey = uploadStoreFile.isPresent && uploadStorePassword.isPresent &&
 
 android {
     namespace = "space.abhijithkm.shoppinglist"
-    compileSdk = 36
+    // compileSdk 37 is required by the current stable AndroidX libraries; targetSdk stays 36 (Play policy).
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "space.abhijithkm.shoppinglist"
@@ -96,6 +97,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.core)
 
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
