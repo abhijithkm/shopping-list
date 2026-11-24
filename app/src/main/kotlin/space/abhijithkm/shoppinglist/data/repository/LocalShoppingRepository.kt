@@ -109,6 +109,7 @@ class LocalShoppingRepository @Inject constructor(
         val parsed = QuickAddParser.parse(input) ?: return null
         val now = clock.nowMillis()
         val id = idGenerator.newId()
+        val author = accountScope.activeAccountId()
         db.withTransaction {
             val order = SortOrder.after(items.maxOpenSortOrder(listId))
             items.upsert(
@@ -119,6 +120,7 @@ class LocalShoppingRepository @Inject constructor(
                     quantity = parsed.quantity,
                     unit = parsed.unit?.take(Limits.UNIT),
                     sortOrder = order,
+                    createdBy = author,
                     createdAt = now,
                     updatedAt = now,
                 ),
@@ -422,6 +424,9 @@ private fun ListWithCounts.toSummary() = ListSummary(
     boughtCount = boughtCount,
     createdAt = list.createdAt,
     updatedAt = list.updatedAt,
+    memberCount = memberCount,
+    ownerName = list.ownerName,
+    isInAccount = list.accountId != null,
 )
 
 private fun ItemWithTags.toModel() = Item(
@@ -436,4 +441,5 @@ private fun ItemWithTags.toModel() = Item(
     boughtAt = item.boughtAt,
     sortOrder = item.sortOrder,
     tags = tags.filter { it.deletedAt == null }.map { Tag(it.id, it.name) }.sortedBy { it.name.lowercase() },
+    createdBy = item.createdBy,
 )

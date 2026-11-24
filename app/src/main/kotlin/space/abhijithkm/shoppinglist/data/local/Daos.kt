@@ -16,6 +16,8 @@ data class ListWithCounts(
     @Embedded val list: ShoppingListEntity,
     val totalCount: Int,
     val boughtCount: Int,
+    /** Active members (owner and editors) this device knows of; 0 for a list that was never shared or never synced. */
+    val memberCount: Int,
 )
 
 /** An item with its (non-deleted) tags; callers filter tombstoned tags. */
@@ -32,7 +34,8 @@ data class ItemWithTags(
 private const val LIST_WITH_COUNTS = """
     SELECT l.*,
       (SELECT COUNT(*) FROM items i WHERE i.listId = l.id AND i.deletedAt IS NULL) AS totalCount,
-      (SELECT COUNT(*) FROM items i WHERE i.listId = l.id AND i.deletedAt IS NULL AND i.isBought = 1) AS boughtCount
+      (SELECT COUNT(*) FROM items i WHERE i.listId = l.id AND i.deletedAt IS NULL AND i.isBought = 1) AS boughtCount,
+      (SELECT COUNT(*) FROM list_members m WHERE m.listId = l.id AND m.role IN ('owner', 'editor')) AS memberCount
     FROM lists l
 """
 
@@ -92,9 +95,16 @@ interface ShoppingListDao {
     @Query("UPDATE lists SET accountId = :accountId, origin = 'CLOUD' WHERE id = :id AND accountId IS NULL AND deletedAt IS NULL")
     suspend fun adopt(id: String, accountId: String)
 
-    /** Account lists -> guest lists (sign-out with "keep a copy"). */
+    /** Account lists -> guest lists (sign-out with "keep a copy"). Lists owned by someone else must be [purgeSharedOf] first. */
     @Query("UPDATE lists SET accountId = NULL, origin = 'LOCAL', serverRevision = 0 WHERE accountId = :accountId")
     suspend fun detachAccount(accountId: String)
+
+    /** Lists other people own and share with the account: not the account's data to keep, they return at the next sign-in. */
+    @Query("DELETE FROM lists WHERE accountId = :accountId AND role = 'EDITOR'")
+    suspend fun purgeSharedOf(accountId: String)
+
+    @Query("SELECT COUNT(*) FROM lists WHERE accountId = :accountId AND role = 'EDITOR' AND deletedAt IS NULL")
+    suspend fun sharedCountOf(accountId: String): Int
 
     @Query("SELECT * FROM lists WHERE accountId = :accountId AND id != :exceptId")
     suspend fun listsOf(accountId: String, exceptId: String = ""): List<ShoppingListEntity>
@@ -276,11 +286,19 @@ interface TagDao {
  */
 @Dao
 interface SyncDao {
+    // A list somebody else owns (role EDITOR) is never pushed: the server lets only the owner change the list row.
     @Query(
-        """SELECT l.* FROM lists l WHERE l.accountId = :accountId AND (l.revision > l.serverRevision OR NOT EXISTS
+        """SELECT l.* FROM lists l WHERE l.accountId = :accountId AND l.role = 'OWNER' AND (l.revision > l.serverRevision OR NOT EXISTS
            (SELECT 1 FROM sync_entities s WHERE s.type = 'list' AND s.id = l.id AND s.base IS NOT NULL)) ORDER BY l.createdAt""",
     )
     suspend fun dirtyLists(accountId: String): List<ShoppingListEntity>
+
+    /** Edits to items of lists owned by others that have not reached the server (lost when the account signs out). */
+    @Query(
+        """SELECT COUNT(*) FROM items i JOIN lists l ON l.id = i.listId WHERE l.accountId = :accountId AND l.role = 'EDITOR' AND (i.revision > i.serverRevision OR NOT EXISTS
+           (SELECT 1 FROM sync_entities s WHERE s.type = 'item' AND s.id = i.id AND s.base IS NOT NULL))""",
+    )
+    suspend fun dirtySharedItemCount(accountId: String): Int
 
     @Query(
         """SELECT i.* FROM items i JOIN lists l ON l.id = i.listId WHERE l.accountId = :accountId AND (i.revision > i.serverRevision OR NOT EXISTS
@@ -303,7 +321,7 @@ interface SyncDao {
     /** Number of rows waiting to be pushed (blocked rows included; subtract [observeBlockedCount]). */
     @Query(
         """SELECT
-           (SELECT COUNT(*) FROM lists l WHERE l.accountId = :accountId AND (l.revision > l.serverRevision OR NOT EXISTS
+           (SELECT COUNT(*) FROM lists l WHERE l.accountId = :accountId AND l.role = 'OWNER' AND (l.revision > l.serverRevision OR NOT EXISTS
               (SELECT 1 FROM sync_entities s WHERE s.type = 'list' AND s.id = l.id AND s.base IS NOT NULL)))
          + (SELECT COUNT(*) FROM items i JOIN lists l ON l.id = i.listId WHERE l.accountId = :accountId AND (i.revision > i.serverRevision OR NOT EXISTS
               (SELECT 1 FROM sync_entities s WHERE s.type = 'item' AND s.id = i.id AND s.base IS NOT NULL)))

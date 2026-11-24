@@ -124,6 +124,7 @@ data class ListDetailActions(
 @Composable
 fun ListDetailScreen(
     onBack: () -> Unit,
+    onShare: (listId: String) -> Unit = {},
     viewModel: ListDetailViewModel = hiltViewModel(), // wired to Hilt; the content below is stateless
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -152,7 +153,7 @@ fun ListDetailScreen(
             onClearFilter = viewModel::clearFilter,
         )
     }
-    ListDetailContent(state = state, actions = actions, onBack = onBack)
+    ListDetailContent(state = state, actions = actions, onBack = onBack, onShare = { state.list?.id?.let(onShare) })
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -161,8 +162,11 @@ fun ListDetailContent(
     state: ListDetailUiState,
     actions: ListDetailActions,
     onBack: () -> Unit = {},
+    onShare: () -> Unit = {},
 ) {
     val list = state.list
+    // Only the owner changes the list itself; an editor works on its items.
+    val canManage = list?.canManage ?: true
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val resources = LocalResources.current
@@ -231,6 +235,13 @@ fun ListDetailContent(
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             DropdownMenuItem(
+                                text = { Text(stringResource(if (canManage) R.string.share_list else R.string.list_members_title)) },
+                                onClick = {
+                                    menuOpen = false
+                                    onShare()
+                                },
+                            )
+                            if (canManage) DropdownMenuItem(
                                 text = { Text(stringResource(R.string.edit_list)) },
                                 onClick = {
                                     menuOpen = false
@@ -274,15 +285,17 @@ fun ListDetailContent(
                                     }
                                 },
                             )
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.archive_list)) },
-                                onClick = {
-                                    menuOpen = false
-                                    actions.onArchiveList()
-                                    onBack()
-                                },
-                            )
+                            if (canManage) {
+                                HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.archive_list)) },
+                                    onClick = {
+                                        menuOpen = false
+                                        actions.onArchiveList()
+                                        onBack()
+                                    },
+                                )
+                            }
                         }
                     }
                 },

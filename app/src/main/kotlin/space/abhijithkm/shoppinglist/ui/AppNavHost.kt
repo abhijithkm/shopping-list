@@ -12,6 +12,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -28,13 +29,26 @@ import space.abhijithkm.shoppinglist.feature.categories.CategoriesScreen
 import space.abhijithkm.shoppinglist.feature.listdetail.ListDetailScreen
 import space.abhijithkm.shoppinglist.feature.lists.ListsScreen
 import space.abhijithkm.shoppinglist.feature.settings.SettingsScreen
+import space.abhijithkm.shoppinglist.feature.sharing.InvitationsScreen
+import space.abhijithkm.shoppinglist.feature.sharing.ShareScreen
 
 const val ROUTE_LISTS = "lists"
 const val ROUTE_CATEGORIES = "categories"
 const val ROUTE_SETTINGS = "settings"
 const val ROUTE_LIST_DETAIL = "list/{listId}"
+const val ROUTE_SHARE = "share/{listId}"
+const val ROUTE_INVITATIONS = "invitations"
 
 fun listDetailRoute(listId: String) = "list/$listId"
+
+fun shareRoute(listId: String) = "share/$listId"
+
+/** Where a tapped notification wants the app to go. */
+sealed interface LaunchTarget {
+    data object Inbox : LaunchTarget
+
+    data class OpenList(val listId: String) : LaunchTarget
+}
 
 /** The bottom bar is only shown on these; the list detail screen uses the full height. */
 private val TOP_LEVEL_ROUTES = setOf(ROUTE_LISTS, ROUTE_CATEGORIES, ROUTE_SETTINGS)
@@ -64,10 +78,19 @@ private val topLevelDestinations = listOf(
 )
 
 @Composable
-fun AppNavHost() {
+fun AppNavHost(launchTarget: LaunchTarget? = null, onLaunchHandled: () -> Unit = {}) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+
+    LaunchedEffect(launchTarget) {
+        when (launchTarget) {
+            LaunchTarget.Inbox -> navController.navigate(ROUTE_INVITATIONS) { launchSingleTop = true }
+            is LaunchTarget.OpenList -> navController.navigate(listDetailRoute(launchTarget.listId)) { launchSingleTop = true }
+            null -> return@LaunchedEffect
+        }
+        onLaunchHandled()
+    }
 
     Scaffold(
         bottomBar = {
@@ -96,13 +119,34 @@ fun AppNavHost() {
             modifier = Modifier.padding(innerPadding),
         ) {
             composable(ROUTE_LISTS) {
-                ListsScreen(onOpenList = { listId -> navController.navigate(listDetailRoute(listId)) })
+                ListsScreen(
+                    onOpenList = { listId -> navController.navigate(listDetailRoute(listId)) },
+                    onOpenInvitations = { navController.navigate(ROUTE_INVITATIONS) },
+                )
             }
             composable(
                 route = ROUTE_LIST_DETAIL,
                 arguments = listOf(navArgument("listId") { type = NavType.StringType }),
             ) {
-                ListDetailScreen(onBack = { navController.popBackStack() })
+                ListDetailScreen(
+                    onBack = { navController.popBackStack() },
+                    onShare = { listId -> navController.navigate(shareRoute(listId)) },
+                )
+            }
+            composable(
+                route = ROUTE_SHARE,
+                arguments = listOf(navArgument("listId") { type = NavType.StringType }),
+            ) {
+                ShareScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenSettings = { navController.navigate(ROUTE_SETTINGS) { launchSingleTop = true } },
+                )
+            }
+            composable(ROUTE_INVITATIONS) {
+                InvitationsScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenSettings = { navController.navigate(ROUTE_SETTINGS) { launchSingleTop = true } },
+                )
             }
             composable(ROUTE_CATEGORIES) { CategoriesScreen() }
             composable(ROUTE_SETTINGS) { SettingsScreen() }

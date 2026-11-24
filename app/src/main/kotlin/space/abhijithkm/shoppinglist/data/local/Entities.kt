@@ -131,6 +131,11 @@ data class SyncEntityEntity(
     val blocked: Boolean = false,
     /** The row's revision when it was blocked; a higher revision means a new edit, so it is tried again. */
     val blockedAtRevision: Int = 0,
+    /**
+     * The server's own edit counter of the row as this device last saw it (items on a collaboration-enabled server);
+     * sent as `base_revision` so a concurrent edit by another member is refused instead of overwritten. 0 = unknown.
+     */
+    @ColumnInfo(defaultValue = "0") val cloudRevision: Int = 0,
 )
 
 /** Small key-value store for sync cursors and the last run summary, per account. */
@@ -148,6 +153,62 @@ object SyncType {
     const val CATEGORY = "category"
     const val TAG = "tag"
 }
+
+/*
+ * Read-only caches of the collaboration tables (backend/apphub/collab-contract.md). The server owns this state; every
+ * pull replaces the account's rows with whatever the account may see. [notified] remembers that a local notification
+ * was shown, so the same invitation is never announced twice.
+ */
+
+/** One membership row of a list. [role] is `owner`, `editor` or `removed`. */
+@Entity(tableName = "list_members", indices = [Index(value = ["accountId", "listId"])])
+data class MemberEntity(
+    @PrimaryKey val id: String,
+    val accountId: String,
+    val listId: String,
+    val memberId: String,
+    val role: String,
+    /** For a removed member: `removed` (by the owner) or `left`. */
+    val removal: String? = null,
+    val displayName: String? = null,
+    val createdAt: Long = 0,
+    val notified: Boolean = false,
+)
+
+/** An invitation sent by the owner or received by the account. [expiresAt] is epoch ms (UTC) or null. */
+@Entity(tableName = "invitations", indices = [Index(value = ["accountId", "status"])])
+data class InvitationEntity(
+    @PrimaryKey val id: String,
+    val accountId: String,
+    val listId: String,
+    val listName: String? = null,
+    val inviterId: String,
+    val inviterName: String? = null,
+    val inviteeId: String,
+    /** Masked hint of the invited person, shown to the owner. */
+    val inviteeHint: String? = null,
+    /** `pending`, `accepted`, `rejected` or `revoked`. */
+    val status: String,
+    val expiresAt: Long? = null,
+    val createdAt: Long = 0,
+    val notified: Boolean = false,
+)
+
+/** A request to join a list by code, made by the account or addressed to it as the list owner. */
+@Entity(tableName = "join_requests", indices = [Index(value = ["accountId", "status"])])
+data class JoinRequestEntity(
+    @PrimaryKey val id: String,
+    val accountId: String,
+    val listId: String,
+    val listName: String? = null,
+    val requesterId: String,
+    val requesterName: String? = null,
+    val ownerId: String,
+    /** `pending`, `approved`, `rejected` or `cancelled`. */
+    val status: String,
+    val createdAt: Long = 0,
+    val notified: Boolean = false,
+)
 
 /** Many-to-many link between items and tags. [listId] is denormalised for list-scoped sync later. */
 @Entity(

@@ -251,12 +251,17 @@ private fun SyncStatusLines(sync: SyncStatus, nowMillis: Long) {
 @Composable
 private fun NoticeRow(notice: AccountNotice, onDismiss: () -> Unit) {
     val text = when (notice) {
-        is AccountNotice.SignedOut ->
+        is AccountNotice.SignedOut -> buildString {
             if (notice.unsyncedChanges > 0) {
-                pluralStringResource(R.plurals.account_signed_out_unsynced, notice.unsyncedChanges, notice.unsyncedChanges)
+                append(pluralStringResource(R.plurals.account_signed_out_unsynced, notice.unsyncedChanges, notice.unsyncedChanges))
             } else {
-                stringResource(R.string.account_signed_out_done)
+                append(stringResource(R.string.account_signed_out_done))
             }
+            if (notice.lostSharedChanges > 0) {
+                append(' ')
+                append(pluralStringResource(R.plurals.account_signout_lost_shared, notice.lostSharedChanges, notice.lostSharedChanges))
+            }
+        }
         is AccountNotice.SyncProblem -> stringResource(
             when (notice.outcome) {
                 SyncOutcome.OFFLINE -> R.string.sync_problem_offline

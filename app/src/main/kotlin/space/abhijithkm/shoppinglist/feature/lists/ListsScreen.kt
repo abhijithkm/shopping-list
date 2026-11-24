@@ -24,9 +24,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
@@ -93,15 +97,17 @@ data class ListsActions(
     val onSetArchived: (listId: String, archived: Boolean) -> Unit = { _, _ -> },
     val onDelete: (listId: String) -> Unit = {},
     val onRestore: (listId: String) -> Unit = {},
+    val onOpenInvitations: () -> Unit = {},
 )
 
 @Composable
 fun ListsScreen(
     onOpenList: (String) -> Unit = {},
+    onOpenInvitations: () -> Unit = {},
     viewModel: ListsViewModel = hiltViewModel(), // wired to Hilt; the content below is stateless
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val actions = remember(viewModel, onOpenList) {
+    val actions = remember(viewModel, onOpenList, onOpenInvitations) {
         ListsActions(
             onCreate = viewModel::createList,
             onOpen = onOpenList,
@@ -113,6 +119,7 @@ fun ListsScreen(
             onSetArchived = viewModel::setArchived,
             onDelete = viewModel::deleteList,
             onRestore = viewModel::restoreList,
+            onOpenInvitations = onOpenInvitations,
         )
     }
     ListsScreenContent(state = state, actions = actions)
@@ -172,6 +179,11 @@ fun ListsScreenContent(
                 },
                 actions = {
                     if (!searching) {
+                        IconButton(onClick = actions.onOpenInvitations) {
+                            BadgedBox(badge = { if (state.inboxCount > 0) Badge { Text(state.inboxCount.toString()) } }) {
+                                Icon(Icons.Filled.Notifications, contentDescription = stringResource(R.string.inbox_action))
+                            }
+                        }
                         IconButton(onClick = { searching = true }) {
                             Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.search))
                         }
@@ -402,8 +414,25 @@ private fun ListCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (list.isShared) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Filled.Person,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = list.ownerName?.let { stringResource(R.string.list_shared_by, it) } ?: stringResource(R.string.list_shared),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 4.dp).testTag("shared_marker"),
+                        )
+                    }
+                }
             }
-            Box {
+            // Only the owner manages the list itself (pin, rename, archive, delete); editors work on its items.
+            if (list.canManage) Box {
                 IconButton(onClick = { menuOpen = true }) {
                     Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.list_options))
                 }

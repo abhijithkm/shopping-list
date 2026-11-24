@@ -68,7 +68,7 @@ sealed interface MigrationUiState {
 }
 
 sealed interface AccountNotice {
-    data class SignedOut(val unsyncedChanges: Int) : AccountNotice
+    data class SignedOut(val unsyncedChanges: Int, val lostSharedChanges: Int = 0) : AccountNotice
 
     data class SyncProblem(val outcome: SyncOutcome) : AccountNotice
 }
@@ -216,7 +216,7 @@ class AccountViewModel @Inject constructor(
     fun signOut() {
         viewModelScope.launch {
             val report = sync.signOut()
-            mutableNotice.value = AccountNotice.SignedOut(report.unsyncedChanges)
+            mutableNotice.value = AccountNotice.SignedOut(report.unsyncedChanges, report.lostSharedChanges)
         }
     }
 

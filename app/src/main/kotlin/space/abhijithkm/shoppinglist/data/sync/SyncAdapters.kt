@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import space.abhijithkm.shoppinglist.core.model.DefaultCategory
 import space.abhijithkm.shoppinglist.core.model.ListOrigin
+import space.abhijithkm.shoppinglist.core.model.MemberRole
 import space.abhijithkm.shoppinglist.core.util.Clock
 import space.abhijithkm.shoppinglist.data.local.AppDatabase
 import space.abhijithkm.shoppinglist.data.local.CategoryEntity
@@ -15,6 +16,7 @@ import space.abhijithkm.shoppinglist.data.local.ShoppingListEntity
 import space.abhijithkm.shoppinglist.data.local.SyncEntityEntity
 import space.abhijithkm.shoppinglist.data.local.SyncType
 import space.abhijithkm.shoppinglist.data.local.TagEntity
+import space.abhijithkm.shoppinglist.data.remote.ItemRow
 import space.abhijithkm.shoppinglist.data.remote.RowCodec
 import space.abhijithkm.shoppinglist.data.remote.Tables
 
@@ -44,6 +46,8 @@ internal class ApplyResult(
     val changed: Boolean = false,
     /** Set for a list tombstone this device has never seen: its items must not hold the pull cursor back. */
     val ignoredId: String? = null,
+    /** Set when another member's change to an item of this list was taken over (shared-activity notifications). */
+    val foreignChangeListId: String? = null,
 )
 
 /** Everything that differs between the four synced tables: how to read dirty rows and how to apply a server row. */
@@ -78,9 +82,15 @@ internal abstract class EntityAdapter(protected val db: AppDatabase, protected v
     /** The synced fields of a raw server row, in the same shape as the local fields. */
     abstract suspend fun serverFields(raw: JsonObject): Fields
 
-    protected suspend fun saveBase(localId: String, serverFields: Fields) {
-        val existing = sync.entity(type, localId)
-        sync.upsertEntity((existing ?: SyncEntityEntity(type, localId)).copy(base = SyncFields.encode(serverFields)))
+    /** Records [serverFields] as the common ancestor; [cloudRevision] (when the server sent one) replaces the stored counter. */
+    protected suspend fun saveBase(localId: String, serverFields: Fields, cloudRevision: Int? = null) {
+        val existing = sync.entity(type, localId) ?: SyncEntityEntity(type, localId)
+        sync.upsertEntity(
+            existing.copy(
+                base = SyncFields.encode(serverFields),
+                cloudRevision = cloudRevision?.takeIf { it > 0 } ?: existing.cloudRevision,
+            ),
+        )
     }
 
     protected fun newRevisionIfNeeded(revision: Int, serverRevision: Int, mustPush: Boolean): Int =
@@ -124,6 +134,8 @@ internal class ListAdapter(db: AppDatabase, clock: Clock) : EntityAdapter(db, cl
                     id = row.id,
                     accountId = account,
                     origin = ListOrigin.CLOUD,
+                    // A list another person owns reaches this account through a membership: the owner column is not ours.
+                    role = if (row.userId != null && row.userId != account) MemberRole.EDITOR else MemberRole.OWNER,
                     name = row.name,
                     description = row.description,
                     icon = row.icon,
@@ -210,14 +222,20 @@ internal class ItemAdapter(db: AppDatabase, clock: Clock) : EntityAdapter(db, cl
                     isBought = row.isBought,
                     boughtAt = row.boughtAtMs,
                     sortOrder = row.sortOrder,
+                    createdBy = row.userId,
+                    updatedBy = row.updatedBy ?: row.userId,
                     createdAt = row.createdAtMs.takeIf { it > 0 } ?: now,
                     updatedAt = row.updatedAtMs.takeIf { it > 0 } ?: now,
                 ),
             )
             items.insertTagLinks(SyncFields.tagIds(serverFields).map { ItemTagCrossRef(row.id, it, row.listId) })
             lists.touchAtLeast(row.listId, row.updatedAtMs)
-            saveBase(row.id, serverFields)
-            return@withTransaction ApplyResult(ApplyOutcome.INSERTED, changed = true)
+            saveBase(row.id, serverFields, row.revision)
+            return@withTransaction ApplyResult(
+                ApplyOutcome.INSERTED,
+                changed = true,
+                foreignChangeListId = row.listId.takeIf { isForeign(row, account) },
+            )
         }
         val list = lists.getById(local.listId)
         if (list == null || list.accountId != account) return@withTransaction ApplyResult(ApplyOutcome.IGNORED)
@@ -226,6 +244,7 @@ internal class ItemAdapter(db: AppDatabase, clock: Clock) : EntityAdapter(db, cl
         val merge = mergeFields(base, SyncFields.item(local, localTags), serverFields, preferServerOnConflict = base == null && row.updatedAtMs > local.updatedAt)
         var updated = if (merge.fromServer.isEmpty()) local else SyncFields.applyTo(local, merge.merged)
         if (merge.fromServer.isNotEmpty() && row.updatedAtMs > updated.updatedAt) updated = updated.copy(updatedAt = row.updatedAtMs)
+        if (merge.fromServer.isNotEmpty() && row.updatedBy != null) updated = updated.copy(updatedBy = row.updatedBy)
         updated = updated.copy(revision = newRevisionIfNeeded(updated.revision, updated.serverRevision, merge.toPush.isNotEmpty()))
         if (updated != local) items.upsert(updated)
         if ("tag_ids" in merge.fromServer) {
@@ -233,9 +252,14 @@ internal class ItemAdapter(db: AppDatabase, clock: Clock) : EntityAdapter(db, cl
             items.insertTagLinks(SyncFields.tagIds(merge.merged).map { ItemTagCrossRef(local.id, it, local.listId) })
         }
         if (merge.fromServer.isNotEmpty()) lists.touchAtLeast(local.listId, row.updatedAtMs)
-        saveBase(row.id, serverFields)
+        saveBase(row.id, serverFields, row.revision)
         if (merge.toPush.isEmpty()) sync.markItemClean(row.id, updated.revision)
-        ApplyResult(ApplyOutcome.MERGED, merge.conflicts.size, changed = merge.fromServer.isNotEmpty())
+        ApplyResult(
+            ApplyOutcome.MERGED,
+            merge.conflicts.size,
+            changed = merge.fromServer.isNotEmpty(),
+            foreignChangeListId = local.listId.takeIf { merge.fromServer.isNotEmpty() && isForeign(row, account) },
+        )
     }
 }
 
@@ -317,6 +341,12 @@ internal class CategoryAdapter(db: AppDatabase, clock: Clock) : EntityAdapter(db
         if (merge.toPush.isEmpty()) sync.markCategoryClean(localId, updated.revision)
         ApplyResult(ApplyOutcome.MERGED, merge.conflicts.size, changed = merge.fromServer.isNotEmpty())
     }
+}
+
+/** True when somebody other than [account] made the latest change to this item (needs the server's `updated_by`). */
+private fun isForeign(row: ItemRow, account: String): Boolean {
+    val author = row.updatedBy ?: return false
+    return author != account
 }
 
 internal class TagAdapter(db: AppDatabase, clock: Clock) : EntityAdapter(db, clock) {

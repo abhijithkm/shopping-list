@@ -5,6 +5,8 @@
     <!-- The app works fully offline; the network is used only for AppHub sign-in and sync. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Local notifications only (invitations, shared changes, reminders); there is no push service. Asked for when the user turns them on. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".ShoppingListApp"

@@ -218,4 +218,134 @@
         <item quantity="one">%d list was moved to your account.</item>
         <item quantity="other">%d lists were moved to your account.</item>
     </plurals>
+
+    <!-- Sharing (Phase 4) -->
+    <string name="close">Close</string>
+    <string name="someone">Someone</string>
+    <string name="a_list">a list</string>
+    <string name="channel_invitations">Invitations and requests</string>
+    <string name="channel_invitations_desc">Someone invites you to a list, asks to join yours, or removes you from one.</string>
+    <string name="channel_activity">Shared list changes</string>
+    <string name="channel_activity_desc">Other members change a list you share.</string>
+    <string name="notify_invitation_title">Invitation to a list</string>
+    <string name="notify_invitation_text">%1$s invited you to “%2$s”.</string>
+    <string name="notify_request_title">Request to join</string>
+    <string name="notify_request_text">%1$s wants to join “%2$s”.</string>
+    <string name="notify_removed_title">No longer a member</string>
+    <string name="notify_removed_text">The owner removed you from a shared list.</string>
+    <string name="notify_left_text">You left a shared list.</string>
+    <plurals name="notify_activity_text">
+        <item quantity="one">%d change by other members</item>
+        <item quantity="other">%d changes by other members</item>
+    </plurals>
+
+    <string name="inbox_action">Invitations and requests</string>
+    <string name="list_shared">Shared</string>
+    <string name="list_shared_by">Shared by %s</string>
+    <string name="share_list">Share…</string>
+    <string name="list_members_title">Members</string>
+
+    <string name="share_title">Share “%s”</string>
+    <string name="share_sign_in_needed">Sign in to share lists. Sharing is only for accounts.</string>
+    <string name="share_move_first">This list is only on this device. Move it to your account in Settings before you share it.</string>
+    <string name="share_open_settings">Open Settings</string>
+    <string name="share_members">Members</string>
+    <string name="share_you">You</string>
+    <string name="role_owner">Owner</string>
+    <string name="role_editor">Editor</string>
+    <string name="member_remove">Remove %s</string>
+    <string name="member_remove_title">Remove %s?</string>
+    <string name="member_remove_body">They lose access to this list right away.</string>
+    <string name="remove">Remove</string>
+    <string name="leave_list">Leave list</string>
+    <string name="leave_title">Leave “%s”?</string>
+    <string name="leave_body">The list disappears from this device. The owner can invite you again.</string>
+    <string name="leave">Leave</string>
+    <string name="editor_note">You can add, change and tick off items. Only the owner can rename, archive or delete the list.</string>
+
+    <string name="invite_title">Invite by email</string>
+    <string name="invite_hint">Email address</string>
+    <string name="invite_find">Find</string>
+    <string name="invite_found">Account found: %s</string>
+    <string name="invite_send">Send invitation</string>
+    <string name="invite_not_found">No account uses that address.</string>
+    <string name="invite_note">They see the invitation in the app and choose to accept or decline. Addresses are never shown to anyone.</string>
+    <string name="invitations_waiting">Waiting for an answer</string>
+    <string name="invitation_invited_person">Invited person</string>
+    <string name="invitation_expires">Invitation expires %s</string>
+    <string name="invitation_cancel">Cancel invitation</string>
+
+    <string name="code_title">Join code</string>
+    <string name="code_note">Anyone with the code can ask to join, and you approve each request. A code works once and expires after 24 hours.</string>
+    <string name="code_create">Create code</string>
+    <string name="code_new">New code</string>
+    <string name="code_share">Share code</string>
+    <string name="code_shown_now">Shown only now. Write it down or share it.</string>
+    <string name="code_active">A code is active until %s. It cannot be shown again; create a new code if you lost it.</string>
+    <string name="code_revoke">Revoke code</string>
+    <string name="code_share_message">Join my shopping list “%1$s” with this code: %2$s (it expires in 24 hours).</string>
+    <string name="code_content_description">Join code %s</string>
+
+    <string name="requests_title">Requests to join</string>
+    <string name="request_row">%s wants to join</string>
+    <string name="approve">Approve</string>
+    <string name="decline">Decline</string>
+
+    <string name="share_done_invite_sent">Invitation sent.</string>
+    <string name="share_done_invitation_revoked">Invitation cancelled.</string>
+    <string name="share_done_code_revoked">Code revoked.</string>
+    <string name="share_done_approved">Request approved.</string>
+    <string name="share_done_rejected">Request declined.</string>
+    <string name="share_done_removed">Member removed.</string>
+
+    <string name="collab_err_forbidden">You are not allowed to do that.</string>
+    <string name="collab_err_not_member">You are no longer a member of this list.</string>
+    <string name="collab_err_not_found">That is no longer available.</string>
+    <string name="collab_err_not_pending">That was already answered.</string>
+    <string name="collab_err_expired">That has expired.</string>
+    <string name="collab_err_invalid_code">That code does not work. Check it and try again.</string>
+    <string name="collab_err_invalid_input">That does not look right. Check it and try again.</string>
+    <string name="collab_err_already_member">That person is already a member.</string>
+    <string name="collab_err_already_pending">There is already an open invitation or request.</string>
+    <string name="collab_err_limit">This list has reached its limit of members or open invitations.</string>
+    <string name="collab_err_throttled">Too many attempts. Wait a while and try again.</string>
+    <string name="collab_err_conflict">Someone changed it at the same time. Try again.</string>
+    <string name="collab_err_not_ready">Sharing is not ready on the server yet.</string>
+    <string name="collab_err_unavailable">Sharing is not available on this server yet.</string>
+    <string name="collab_err_offline">No connection. Sharing needs the internet.</string>
+    <string name="collab_err_sign_in">Sign in again to continue.</string>
+    <string name="collab_err_rate">The server is busy. Try again in a minute.</string>
+    <string name="collab_err_unknown">Something went wrong. Try again.</string>
+
+    <string name="invitations_title">Invitations</string>
+    <string name="invitations_sign_in">Sign in to see invitations and to join a list.</string>
+    <string name="invitations_none">No invitations right now.</string>
+    <string name="invitation_from">%s invited you</string>
+    <string name="accept">Accept</string>
+    <string name="join_title">Join with a code</string>
+    <string name="join_hint">8-character code</string>
+    <string name="join_check">Check code</string>
+    <string name="join_preview">“%1$s”, shared by %2$s</string>
+    <string name="join_ask">Ask to join</string>
+    <string name="join_note">The owner has to approve your request.</string>
+    <string name="join_invalid">That code does not work. It may be wrong, expired or already used.</string>
+    <string name="requests_mine">Your requests</string>
+    <string name="request_mine_row">“%s”, waiting for approval</string>
+    <string name="request_cancel">Cancel request</string>
+    <string name="inv_done_joined">You joined the list. It appears in your lists after the next sync.</string>
+    <string name="inv_done_declined">Invitation declined.</string>
+    <string name="inv_done_request_sent">Request sent. The owner has to approve it.</string>
+    <string name="inv_done_request_cancelled">Request cancelled.</string>
+
+    <string name="settings_notifications">Notifications</string>
+    <string name="settings_notify_invitations">Invitations and requests</string>
+    <string name="settings_notify_invitations_summary">Tell me when someone invites me, asks to join my list or removes me from one.</string>
+    <string name="settings_notify_activity">Shared list changes</string>
+    <string name="settings_notify_activity_summary">Tell me when other members change a shared list. Checked about every 30 minutes.</string>
+    <string name="settings_notifications_blocked">Notifications are turned off for this app, so these alerts cannot appear.</string>
+    <string name="settings_notifications_allow">Allow</string>
+    <plurals name="account_signout_lost_shared">
+        <item quantity="one">%d change to a shared list had not been sent and is discarded with the list.</item>
+        <item quantity="other">%d changes to shared lists had not been sent and are discarded with the lists.</item>
+    </plurals>
 </resources>

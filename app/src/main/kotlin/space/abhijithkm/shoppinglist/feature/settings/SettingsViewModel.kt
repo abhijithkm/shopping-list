@@ -27,4 +27,12 @@ class SettingsViewModel @Inject constructor(
     fun setShowCompleted(show: Boolean) {
         viewModelScope.launch { repository.setShowCompleted(show) }
     }
+
+    fun setNotifyInvitations(enabled: Boolean) {
+        viewModelScope.launch { repository.setNotifyInvitations(enabled) }
+    }
+
+    fun setNotifySharedActivity(enabled: Boolean) {
+        viewModelScope.launch { repository.setNotifySharedActivity(enabled) }
+    }
 }
