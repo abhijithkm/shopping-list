@@ -1,4 +1,5 @@
 {
+    "actor_in_sql": true,
     "jwt": {
         "access_ttl": 900,
         "refresh_ttl": 1209600
@@ -39,6 +40,18 @@
         "shopping_lists": {
             "pk": "id",
             "owner": "user_id",
+            "shared_via": {
+                "table": "list_members",
+                "on": "id",
+                "match": "list_id",
+                "member": "member_id",
+                "level": "role",
+                "read": [
+                    "owner",
+                    "editor"
+                ],
+                "update": []
+            },
             "hidden": [],
             "writable": [
                 "id",
@@ -66,6 +79,21 @@
         "shopping_items": {
             "pk": "id",
             "owner": "user_id",
+            "shared_via": {
+                "table": "list_members",
+                "on": "list_id",
+                "match": "list_id",
+                "member": "member_id",
+                "level": "role",
+                "read": [
+                    "owner",
+                    "editor"
+                ],
+                "update": [
+                    "owner",
+                    "editor"
+                ]
+            },
             "hidden": [],
             "writable": [
                 "id",
@@ -81,7 +109,8 @@
                 "tag_ids",
                 "created_at_ms",
                 "updated_at_ms",
-                "deleted_at_ms"
+                "deleted_at_ms",
+                "base_revision"
             ],
             "searchable": [],
             "sortable": [
@@ -136,6 +165,158 @@
             "filterable": [
                 "id"
             ]
+        },
+        "list_members": {
+            "pk": "id",
+            "owner": "user_id",
+            "members": [
+                "member_id"
+            ],
+            "hidden": [],
+            "writable": [],
+            "searchable": [],
+            "sortable": [
+                "id",
+                "updated_at",
+                "created_at_ms"
+            ],
+            "filterable": [
+                "id",
+                "list_id",
+                "member_id"
+            ]
+        },
+        "user_lookups": {
+            "pk": "id",
+            "owner": "user_id",
+            "hidden": [
+                "email",
+                "target_id"
+            ],
+            "writable": [
+                "id",
+                "email"
+            ],
+            "searchable": [],
+            "sortable": [
+                "id",
+                "updated_at",
+                "created_at_ms"
+            ],
+            "filterable": [
+                "id"
+            ]
+        },
+        "list_invitations": {
+            "pk": "id",
+            "owner": "user_id",
+            "members": [
+                "invitee_id"
+            ],
+            "hidden": [],
+            "writable": [
+                "id",
+                "list_id",
+                "lookup_id"
+            ],
+            "searchable": [],
+            "sortable": [
+                "id",
+                "updated_at",
+                "created_at_ms"
+            ],
+            "filterable": [
+                "id",
+                "list_id",
+                "status"
+            ]
+        },
+        "join_codes": {
+            "pk": "id",
+            "owner": "user_id",
+            "hidden": [
+                "code",
+                "code_hash"
+            ],
+            "writable": [
+                "id",
+                "list_id",
+                "code"
+            ],
+            "searchable": [],
+            "sortable": [
+                "id",
+                "updated_at",
+                "created_at_ms"
+            ],
+            "filterable": [
+                "id",
+                "list_id",
+                "status"
+            ]
+        },
+        "code_lookups": {
+            "pk": "id",
+            "owner": "user_id",
+            "hidden": [
+                "code",
+                "code_id"
+            ],
+            "writable": [
+                "id",
+                "code"
+            ],
+            "searchable": [],
+            "sortable": [
+                "id",
+                "updated_at",
+                "created_at_ms"
+            ],
+            "filterable": [
+                "id"
+            ]
+        },
+        "join_requests": {
+            "pk": "id",
+            "owner": "user_id",
+            "members": [
+                "owner_id"
+            ],
+            "hidden": [],
+            "writable": [
+                "id",
+                "lookup_id"
+            ],
+            "searchable": [],
+            "sortable": [
+                "id",
+                "updated_at",
+                "created_at_ms"
+            ],
+            "filterable": [
+                "id",
+                "list_id",
+                "status"
+            ]
+        },
+        "list_commands": {
+            "pk": "id",
+            "owner": "user_id",
+            "hidden": [],
+            "writable": [
+                "id",
+                "command",
+                "target_id"
+            ],
+            "searchable": [],
+            "sortable": [
+                "id",
+                "updated_at",
+                "created_at_ms"
+            ],
+            "filterable": [
+                "id"
+            ]
         }
     },
     "roles": {
@@ -145,16 +326,16 @@
                 "update": "own"
             },
             "shopping_lists": {
-                "list": "own",
-                "read": "own",
+                "list": "shared",
+                "read": "shared",
                 "create": "own",
                 "update": "own"
             },
             "shopping_items": {
-                "list": "own",
-                "read": "own",
+                "list": "shared",
+                "read": "shared",
                 "create": "own",
-                "update": "own"
+                "update": "shared"
             },
             "categories": {
                 "list": "own",
@@ -167,6 +348,40 @@
                 "read": "own",
                 "create": "own",
                 "update": "own"
+            },
+            "list_members": {
+                "list": "shared",
+                "read": "shared"
+            },
+            "user_lookups": {
+                "list": "own",
+                "read": "own",
+                "create": "own"
+            },
+            "list_invitations": {
+                "list": "shared",
+                "read": "shared",
+                "create": "own"
+            },
+            "join_codes": {
+                "list": "own",
+                "read": "own",
+                "create": "own"
+            },
+            "code_lookups": {
+                "list": "own",
+                "read": "own",
+                "create": "own"
+            },
+            "join_requests": {
+                "list": "shared",
+                "read": "shared",
+                "create": "own"
+            },
+            "list_commands": {
+                "list": "own",
+                "read": "own",
+                "create": "own"
             }
         }
     }

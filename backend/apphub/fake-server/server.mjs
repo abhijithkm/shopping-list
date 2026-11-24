@@ -8,8 +8,10 @@
 // when available, ::1). Its behaviour mirrors the AppHub PHP source read for Phase 3 (Kernel, CrudController,
 // AuthController, TokenService, Passwords, RateLimiter): envelope, status codes and messages. The tables are NOT written
 // here: they are loaded from ../schema.sql (column types, NOT NULL, defaults, keys, foreign keys, CHECKs) and from
-// ../shoppinglist.config.json (owner, writable, sortable, filterable, roles), so the fake cannot drift from the files an
-// operator will apply. README.md lists every known difference from real AppHub.
+// ../shoppinglist.config.json (owner, writable, sortable, filterable, roles, shared_via, members, hidden), so the fake cannot drift
+// from the files an operator will apply. Since Phase 4 it also emulates the `shared` scope (AppHub src/Controllers/CrudController.php
+// sharedCondition) and the MySQL triggers of ../triggers.sql (triggers.mjs, one function per trigger, compared with the SQL file at
+// start). README.md lists every known difference from real AppHub.
 //
 // No dependencies: Node 18 or newer (written and tested on Node 26).
 
@@ -18,6 +20,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { TRIGGERS, triggersFor } from './triggers.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -50,6 +53,8 @@ export const DEFAULTS = {
   apps: ['shoppinglistdev', 'shoppinglist'],
   config: path.resolve(HERE, '..', 'shoppinglist.config.json'),
   schema: path.resolve(HERE, '..', 'schema.sql'),
+  triggers: path.resolve(HERE, '..', 'triggers.sql'), // only READ, to compare with the emulation in triggers.mjs
+  noPepper: false, // true: the app_secrets row code_pepper is missing at start (code operations answer sl:server_not_ready)
   accessTtl: null, // null: the config's jwt.access_ttl (900)
   refreshTtl: null, // null: the config's jwt.refresh_ttl (1209600)
   jwtLeeway: 30, // Jwt::LEEWAY
@@ -582,6 +587,11 @@ function coerce(col, value) {
       if (Buffer.byteLength(s) > col.len) throw new DbError('generic', `Data too long for column '${col.name}'`);
       return s;
     }
+    case 'datetime': {
+      // Only the fake's own triggers write a DATETIME (a client cannot: no config lists one as writable). A number is epoch ms.
+      if (typeof value !== 'number' || !Number.isFinite(value)) throw new DbError('generic', `Column '${col.name}' (${col.type}) cannot be written`);
+      return col.fsp > 0 ? Math.round(value) : Math.floor(value / 1000) * 1000;
+    }
     default:
       throw new DbError('generic', `Column '${col.name}' (${col.type}) cannot be written`);
   }
@@ -635,7 +645,49 @@ function normalizeAuth(a, o) {
   return auth;
 }
 
-function buildTableMeta(cfg, schema, auth, warnings) {
+/**
+ * What triggers.sql assigns, read from the file: { table: { column: 'null' | 'value' } } for every `SET NEW.<col> = ...;` of a
+ * trigger on that table ('null' only when EVERY assignment to the column is NULL: a transient control column such as `code` or
+ * `base_revision`, which a client may still send), plus the trigger list. triggers.sql must keep one assignment per SET statement
+ * (its header says so) for this to be exact. Returns null when the file is missing.
+ */
+function readTriggerFile(file) {
+  if (!file || !fs.existsSync(file)) return null;
+  const text = fs.readFileSync(file, 'utf8');
+  const triggers = [];
+  const assigned = {};
+  const re = /CREATE TRIGGER\s+(\w+)\s+(BEFORE|AFTER)\s+(INSERT|UPDATE|DELETE)\s+ON\s+(\w+)/gi;
+  const starts = [];
+  let m;
+  while ((m = re.exec(text))) starts.push({ name: m[1], when: m[2].toUpperCase(), event: m[3].toUpperCase(), table: m[4], at: m.index });
+  starts.forEach((s, i) => {
+    triggers.push({ name: s.name, when: s.when, event: s.event, table: s.table });
+    const body = text.slice(s.at, i + 1 < starts.length ? starts[i + 1].at : text.length);
+    const set = /\bSET\s+NEW\.(\w+)\s*=\s*([^;]+);/gi;
+    let a;
+    while ((a = set.exec(body))) {
+      const kind = /^NULL$/i.test(a[2].trim()) ? 'null' : 'value';
+      const t = (assigned[s.table] ??= {});
+      t[a[1]] = t[a[1]] === 'value' || kind === 'value' ? 'value' : 'null';
+    }
+  });
+  return { triggers, assigned };
+}
+
+/** Drift between triggers.sql and triggers.mjs: a trigger that exists on one side only. */
+function checkTriggerDrift(info, warnings) {
+  if (!info) {
+    warnings.push('triggers.sql was not found: the fake cannot compare its trigger emulation with the SQL');
+    return;
+  }
+  const key = (t) => `${t.name} ${t.when} ${t.event} ${t.table}`;
+  const sql = new Set(info.triggers.map(key));
+  const js = new Set(TRIGGERS.map(key));
+  for (const k of sql) if (!js.has(k)) warnings.push(`triggers.sql defines "${k}" which the fake does not emulate (triggers.mjs)`);
+  for (const k of js) if (!sql.has(k)) warnings.push(`the fake emulates "${k}" which triggers.sql does not define`);
+}
+
+function buildTableMeta(cfg, schema, auth, warnings, triggerInfo) {
   const meta = {};
   for (const [name, t] of Object.entries(cfg.tables || {})) {
     const st = schema[name];
@@ -667,7 +719,25 @@ function buildTableMeta(cfg, schema, auth, warnings) {
       searchable: keep(t.searchable, 'searchable'),
       sortable: keep(t.sortable || [pk], 'sortable'),
       fileColumns: [],
+      members: keep(t.members, 'members'),
+      sharedVia: null,
     };
+    if (t.shared_via) {
+      // AppHub App::normalize / CrudController::assertShareable: the grant table must exist, differ from this table, and have the columns.
+      const s = t.shared_via;
+      const grant = schema[s.table];
+      if (!grant) throw new Error(`config ${name}.shared_via.table "${s.table}" has no CREATE TABLE in schema.sql`);
+      if (s.table.toLowerCase() === name.toLowerCase()) throw new Error(`config ${name}.shared_via.table must differ from the table itself (AppHub refuses a self-grant)`);
+      const on = s.on || pk;
+      if (!colNames.includes(on)) throw new Error(`config ${name}.shared_via.on "${on}" is not a column of ${name}`);
+      for (const part of ['match', 'member', 'level']) {
+        if (!grant.columns.some((c) => c.name === s[part])) throw new Error(`config ${name}.shared_via.${part} "${s[part]}" is not a column of ${s.table}`);
+      }
+      if (!Array.isArray(s.read) || s.read.length === 0) throw new Error(`config ${name}.shared_via.read must name at least one level`);
+      m.sharedVia = { table: s.table, on, match: s.match, member: s.member, level: s.level, read: [...s.read], update: [...(s.update || [])] };
+    }
+    // AppHub also lets the first sign-in table's members columns act; they must be real columns.
+    for (const c of t.members || []) if (!colNames.includes(c)) throw new Error(`config ${name}.members "${c}" is not a column of ${name}`);
     for (const [role, cols] of Object.entries(t.writable_by_role || {})) m.writableByRole[role] = keep(cols, `writable_by_role.${role}`);
     if (!m.sortable.includes(pk)) m.sortable.push(pk);
     if (isAuth) {
@@ -680,13 +750,19 @@ function buildTableMeta(cfg, schema, auth, warnings) {
       for (const r of Object.keys(m.writableByRole)) m.writableByRole[r] = strip(m.writableByRole[r]);
     }
     for (const l of ['filterable', 'searchable', 'sortable']) m[l] = m[l].filter((c) => !m.hidden.includes(c));
-    // Reverse drift: a column the client is expected to write but the config forgot, or the opposite.
+    // Reverse drift: a column the client is expected to write but the config forgot, or the opposite. A column a trigger sets to a
+    // VALUE is server-managed (never writable); one a trigger only ever sets to NULL is a transient control column the client sends
+    // (base_revision, email, code) and must stay writable. A table nobody may create in or update (list_members) has no writable list.
     if (!isAuth) {
+      const set = triggerInfo?.assigned?.[name] ?? {};
+      const clientWrites = Object.values(cfg.roles || {}).some((rules) => ['create', 'update'].some((a) => rules[name]?.[a]));
       for (const c of st.columns) {
-        const serverManaged = c.name === m.owner || c.onUpdateNow || c.autoInc;
-        if (!serverManaged && !m.writable.includes(c.name)) warnings.push(`schema.sql column ${name}.${c.name} is not in the config's writable list (forgotten?)`);
+        const serverManaged = c.name === m.owner || c.onUpdateNow || c.autoInc || set[c.name] === 'value';
+        if (clientWrites && !serverManaged && !m.writable.includes(c.name)) warnings.push(`schema.sql column ${name}.${c.name} is not in the config's writable list (forgotten?)`);
         if (serverManaged && m.writable.includes(c.name)) warnings.push(`config ${name}.writable lists the server-managed column ${c.name}`);
+        if (!clientWrites && m.writable.includes(c.name)) warnings.push(`config ${name}.writable lists ${c.name} but no role may create or update ${name}`);
       }
+      for (const c of Object.keys(set)) if (!st.columns.some((x) => x.name === c)) warnings.push(`triggers.sql sets NEW.${c} on ${name} but schema.sql has no such column`);
     }
     meta[name] = m;
   }
@@ -695,8 +771,16 @@ function buildTableMeta(cfg, schema, auth, warnings) {
       if (table !== '*' && !meta[table]) throw new Error(`config roles.${role} names unknown table ${table}`);
       for (const [action, scope] of Object.entries(actions)) {
         if (!ACTIONS.includes(action) || !['all', 'own', 'shared'].includes(scope)) throw new Error(`config roles.${role}.${table}: ${action} => ${scope} is not valid`);
-        if (scope === 'shared') throw new Error('the fake does not implement the "shared" scope (not used in Phase 3)');
-        if (action === 'delete') throw new Error('the fake does not implement delete (no role gets delete in Phase 3: clients tombstone with deleted_at_ms)');
+        if (scope === 'shared') {
+          // The same refusals as App::normalize.
+          const t = meta[table];
+          if (!['list', 'read', 'update'].includes(action)) throw new Error(`config roles.${role}.${table}: 'shared' is only valid for list, read and update, not '${action}'`);
+          if (!t) throw new Error(`config roles.${role}.${table}: 'shared' needs a table of its own`);
+          if (table === auth.table) throw new Error(`config roles.${role}.${table}: 'shared' cannot be used on the users table`);
+          if (action === 'update' && (!t.sharedVia || t.sharedVia.update.length === 0)) throw new Error(`config roles.${role}.${table}: 'update' => 'shared' needs shared_via with a non-empty update list`);
+          if (!t.sharedVia && t.members.length === 0) throw new Error(`config roles.${role}.${table}: 'shared' needs shared_via or members`);
+        }
+        if (action === 'delete') throw new Error('the fake does not implement delete (no role gets delete: clients tombstone with deleted_at_ms)');
       }
     }
   }
@@ -737,10 +821,20 @@ class Limiter {
   }
 }
 
+/** The operator's seed: a random code pepper in app_secrets (unless --no-pepper). Real value comes from `openssl rand`, see seed.sql. */
+function seedPepper(world, app, force = false) {
+  const st = world.schema.app_secrets;
+  if (!st || (world.opts.noPepper && !force)) return;
+  const row = { name: 'code_pepper', value: crypto.randomBytes(32).toString('hex'), updated_at: tsNow(world, 3) };
+  app.tables.app_secrets.rows.set(rowKey(st, st.pk, row), row);
+}
+
 function newAppState(world, name, secret) {
   const tables = {};
   for (const t of Object.values(world.schema)) tables[t.name] = { rows: new Map(), autoInc: 1 };
-  return { name, secret: secret || crypto.randomBytes(32).toString('hex'), tables, refresh: [], userTokens: [], outbox: [] };
+  const app = { name, secret: secret || crypto.randomBytes(32).toString('hex'), tables, refresh: [], userTokens: [], outbox: [] };
+  seedPepper(world, app);
+  return app;
 }
 
 function createWorld(o) {
@@ -748,7 +842,9 @@ function createWorld(o) {
   const schema = parseSchema(fs.readFileSync(o.schema, 'utf8'));
   const warnings = [];
   const auth = normalizeAuth(cfg.auth || {}, o);
-  const meta = buildTableMeta(cfg, schema, auth, warnings);
+  const triggerInfo = readTriggerFile(o.triggers);
+  checkTriggerDrift(triggerInfo, warnings);
+  const meta = buildTableMeta(cfg, schema, auth, warnings, triggerInfo);
   if (!meta[auth.table]) throw new Error(`the auth table ${auth.table} is not in the config`);
   for (const name of o.apps) {
     if (!APP_NAME_RE.test(name) || RESERVED_APP_NAMES.includes(name)) throw new Error(`"${name}" is not a valid app name`);
@@ -765,6 +861,7 @@ function createWorld(o) {
     refreshTtl: o.refreshTtl ?? cfg.jwt?.refresh_ttl ?? 1209600,
     clockOffsetMs: 0,
     faults: [],
+    accessLog: [], // "METHOD path -> status ms" lines (never a body, a query or a token), for GET /__log and the log scan
     apps: new Map(),
     limiter: null,
     saveTimer: null,
@@ -798,6 +895,7 @@ function createWorld(o) {
       this.limiter = new Limiter(this);
       this.faults = [];
       this.clockOffsetMs = 0;
+      this.accessLog = [];
       this.markDirty();
     },
     load() {
@@ -813,6 +911,7 @@ function createWorld(o) {
           if (!app.tables[t]) continue;
           app.tables[t].autoInc = st.autoInc;
           const sch = schema[t];
+          app.tables[t].rows.clear(); // the saved table replaces the freshly seeded one (a pepper deleted before the save stays deleted)
           for (const row of st.rows) app.tables[t].rows.set(rowKey(sch, sch.pk, row), row);
         }
         app.refresh = s.refresh || [];
@@ -1034,6 +1133,71 @@ function updateRow(world, app, tableName, row, data) {
     world.markDirty();
   }
   return row;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Statement atomicity and the trigger facade. MySQL rolls back everything a statement did, triggers' changes to other tables
+// included, when any part of it fails (a SIGNAL, a duplicate key, a foreign key, a CHECK). The journal does the same: every change
+// made through `db` registers an undo, and a failure replays them backwards.
+// ---------------------------------------------------------------------------------------------------------------------
+function transact(fn) {
+  const journal = [];
+  try {
+    return fn(journal);
+  } catch (e) {
+    for (let i = journal.length - 1; i >= 0; i--) journal[i]();
+    throw e;
+  }
+}
+
+function makeDb(world, app, journal) {
+  const pkValueRow = (st, id) => {
+    const pkCol = st.columns.find((c) => c.name === st.pk[0]);
+    return { [st.pk[0]]: pkCol.kind === 'int' ? Number(id) : id };
+  };
+  const db = {
+    operator: false, // the real trigger's @sl_operator: never set through the API
+    now: () => world.now(),
+    nowMs: () => Math.floor(world.now()),
+    uuid: () => crypto.randomUUID(),
+    rows: (table) => [...app.tables[table].rows.values()],
+    byId(table, id) {
+      const st = world.schema[table];
+      if (id === null || id === undefined || st.pk.length !== 1) return null;
+      return app.tables[table].rows.get(rowKey(st, st.pk, pkValueRow(st, id))) ?? null;
+    },
+    user: (id) => (id === null || id === undefined ? null : findUserById(world, app, id)),
+    pepper() {
+      const st = world.schema.app_secrets;
+      if (!st) return null;
+      return app.tables.app_secrets.rows.get('code_pepper')?.value ?? null;
+    },
+    insert(table, data) {
+      const row = insertRow(world, app, table, data);
+      const st = world.schema[table];
+      const key = rowKey(st, st.pk, row);
+      journal.push(() => app.tables[table].rows.delete(key));
+      return row;
+    },
+    update(table, row, changes) {
+      const before = { ...row };
+      updateRow(world, app, table, row, changes);
+      journal.push(() => Object.assign(row, before));
+      return row;
+    },
+    refuse(token) {
+      throw E.unprocessable(token); // SIGNAL SQLSTATE '45000': HTTP 422, error.message is the sl: token, no details
+    },
+    duplicate() {
+      throw new DbError('dup', 'Duplicate entry (SIGNAL 23000 / 1062 in a trigger)'); // AppHub answers 409
+    },
+  };
+  return db;
+}
+
+/** Runs the triggers for (when, event, table). `NEW` is the values the statement would store; set(col, v) assigns one. */
+function fireTriggers(db, when, event, table, ctx) {
+  for (const t of triggersFor(when, event, table)) t.run(db, ctx);
 }
 
 function presentRow(meta, row) {
@@ -1380,7 +1544,10 @@ function allowedColumns(world, meta, who, scope, creating) {
   const allowed = meta.writableByRole[who.role] ?? meta.writable;
   const never = [];
   if (!creating || !allowed.includes(meta.pk)) never.push(meta.pk);
-  if (scope === 'own') {
+  if (scope === 'own' || scope === 'shared') {
+    // AppHub (CrudController::allowedColumns): under `shared` the members columns are never writable either (a members column would
+    // let an editor hand out read access). Under `own` they are not excluded: the config must simply not list them.
+    if (scope === 'shared') never.push(...meta.members);
     never.push(meta.owner);
     if (meta.name === world.auth.table) never.push(world.auth.role, world.auth.status, world.auth.email, world.auth.verified_column);
   }
@@ -1408,16 +1575,42 @@ function describeTable(world, who, name) {
   };
 }
 
-const ownedBy = (world, meta, who, row) => row[meta.owner] !== undefined && keyOfValue(meta.schema.columns.find((c) => c.name === meta.owner), row[meta.owner]) === Number(who.id);
+const ownedBy = (world, meta, who, row) => meta.owner !== null && row[meta.owner] !== undefined && keyOfValue(meta.schema.columns.find((c) => c.name === meta.owner), row[meta.owner]) === Number(who.id);
 
-function findScoped(world, app, meta, who, id, scope) {
+/**
+ * The one place a scope becomes a yes or no for a row: AppHub's ownerCondition / sharedCondition (src/Controllers/CrudController.php).
+ * `own`: the owner column is the caller. `shared`: the owner, OR (list and read only, never update) a members column is the caller, OR a
+ * grant row exists whose match column equals this row's `on` column, whose member column is the caller and whose level is one of
+ * shared_via.read (list, read) or shared_via.update (update). The grant table is evaluated on EVERY request, so a person whose grant
+ * row changed to a level that is not listed (role removed) gets 404 on their next call. NB the owner term is always OR-ed in.
+ */
+function rowVisible(world, app, meta, who, row, scope, action) {
+  if (scope === 'all') return true;
+  const owned = ownedBy(world, meta, who, row);
+  if (scope === 'own' || owned) return owned;
+  const uid = Number(who.id);
+  if (action !== 'update' && meta.members.some((c) => row[c] !== null && row[c] !== undefined && Number(row[c]) === uid)) return true;
+  const via = meta.sharedVia;
+  if (!via) return false;
+  const levels = action === 'update' ? via.update : via.read;
+  if (levels.length === 0) return false;
+  const on = row[via.on];
+  if (on === null || on === undefined) return false;
+  for (const g of app.tables[via.table].rows.values()) {
+    if (g[via.member] === null || g[via.member] === undefined || Number(g[via.member]) !== uid) continue;
+    if (g[via.match] === null || g[via.match] === undefined || String(g[via.match]).toLowerCase().replace(/ +$/, '') !== String(on).toLowerCase().replace(/ +$/, '')) continue;
+    if (levels.some((l) => String(l).toLowerCase() === String(g[via.level]).toLowerCase())) return true;
+  }
+  return false;
+}
+
+function findScoped(world, app, meta, who, id, scope, action = 'read') {
   const pkCol = meta.schema.columns.find((c) => c.name === meta.pk);
   const k = pkCol.kind === 'int' ? (/^\s*\d+\s*$/.test(id) ? String(Number(id)) : null) : id.toLowerCase().replace(/ +$/, '');
   if (k === null || meta.schema.pk.length !== 1) return null;
   const row = app.tables[meta.name].rows.get(k);
   if (!row) return null;
-  if (scope === 'own' && !ownedBy(world, meta, who, row)) return null;
-  return row;
+  return rowVisible(world, app, meta, who, row, scope, action) ? row : null;
 }
 
 function positiveInt(value, name, max) {
@@ -1470,7 +1663,7 @@ const crud = {
     const page = positiveInt(hasOwn(query, 'page') ? query.page : '1', 'page', 1000000);
     const limit = positiveInt(hasOwn(query, 'limit') ? query.limit : '20', 'limit', MAX_LIMIT);
 
-    let rows = [...app.tables[table].rows.values()].filter((row) => (scope !== 'own' || ownedBy(world, meta, who, row)) && filters.every(([col, v]) => filterMatches(col, row[col.name], v)));
+    let rows = [...app.tables[table].rows.values()].filter((row) => rowVisible(world, app, meta, who, row, scope, 'list') && filters.every(([col, v]) => filterMatches(col, row[col.name], v)));
     const total = rows.length;
     const sortCol = meta.schema.columns.find((c) => c.name === sort);
     const dir = order === 'asc' ? 1 : -1;
@@ -1482,7 +1675,7 @@ const crud = {
   read(world, app, who, table, id) {
     const meta = tableMeta(world, table);
     const scope = requireScope(world, who, table, 'read');
-    const row = findScoped(world, app, meta, who, id, scope);
+    const row = findScoped(world, app, meta, who, id, scope, 'read');
     if (!row) throw E.notFound();
     return ok(presentRow(meta, row));
   },
@@ -1498,19 +1691,50 @@ const crud = {
       data[meta.owner] = who.id;
     }
     if (Object.keys(data).length === 0) throw E.unprocessable('No writable fields were provided');
-    const row = insertRow(world, app, table, data);
+    // One INSERT statement: BEFORE INSERT trigger(s), the row (defaults, CHECKs, keys, foreign keys), AFTER INSERT trigger(s). A failure
+    // anywhere undoes the trigger's changes to other tables too. Then AppHub reads the row back WITHOUT a scope (`all`), so the
+    // 201 carries every column a trigger set (hidden ones are left out by presentRow).
+    const row = transact((journal) => {
+      const db = makeDb(world, app, journal);
+      const actor = who.type === 'user' ? Number(who.id) : null;
+      const ctx = { NEW: data, OLD: null, actor, set: (col, value) => (data[col] = value) };
+      fireTriggers(db, 'BEFORE', 'INSERT', table, ctx);
+      const inserted = db.insert(table, data);
+      fireTriggers(db, 'AFTER', 'INSERT', table, { NEW: inserted, OLD: null, actor, set: () => {} });
+      return inserted;
+    });
     return ok(presentRow(meta, row), 201);
   },
 
   update(world, app, who, table, id, body) {
     const meta = tableMeta(world, table);
     const scope = requireScope(world, who, table, 'update');
-    const row = findScoped(world, app, meta, who, id, scope);
+    const row = findScoped(world, app, meta, who, id, scope, 'update');
     if (!row) throw E.notFound();
     const data = writableData(world, meta, who, scope, body, false);
     if (Object.keys(data).length === 0) throw E.unprocessable('No writable fields were provided');
-    updateRow(world, app, table, row, data);
-    return ok(presentRow(meta, row));
+    // One UPDATE statement: BEFORE UPDATE trigger(s) may refuse or assign NEW columns, then the row changes.
+    transact((journal) => {
+      const db = makeDb(world, app, journal);
+      const actor = who.type === 'user' ? Number(who.id) : null;
+      const changes = { ...data };
+      const NEW = { ...row, ...changes };
+      const ctx = {
+        NEW,
+        OLD: { ...row },
+        actor,
+        set: (col, value) => {
+          NEW[col] = value;
+          changes[col] = value;
+        },
+      };
+      fireTriggers(db, 'BEFORE', 'UPDATE', table, ctx);
+      db.update(table, row, changes);
+    });
+    // A shared row is read back with the same rule: someone whose access this update ended gets 404 and no row.
+    const after = findScoped(world, app, meta, who, id, scope === 'shared' ? 'shared' : 'all', 'update');
+    if (!after && scope === 'shared') throw E.notFound();
+    return ok(presentRow(meta, after ?? row));
   },
 
   /** The real CrudController checks the table and the role's delete scope before it looks at the id or the query. */
@@ -1655,18 +1879,38 @@ function devBody(r) {
   }
 }
 
-function stateSummary(world, dump) {
+/** Placeholder, missing or real: never the value (the pepper is a secret like a password hash). */
+function pepperStatus(app) {
+  const p = app.tables.app_secrets?.rows.get('code_pepper')?.value;
+  if (p === undefined || p === null) return 'missing';
+  return [...p].length < 32 || /^replace/i.test(p) ? 'placeholder' : 'set';
+}
+
+/**
+ * Inspection for tests. `dump=1` lists the rows as the API would show them (hidden columns left out); `hidden=1` adds the hidden
+ * columns too (code_hash, code_id, target_id, and the plaintext columns `email` and `code`, which are always null: that is the point).
+ * Password hashes and the pepper are NEVER shown, and no plaintext join code can appear: the fake never stores one.
+ */
+function stateSummary(world, dump, withHidden = false) {
   const apps = {};
   const nowMs = world.now();
   for (const [name, app] of world.apps) {
     const tables = {};
     for (const [t, store] of Object.entries(app.tables)) {
-      tables[t] = dump ? [...store.rows.values()].map((row) => presentRow({ schema: world.schema[t], hidden: world.meta[t]?.hidden ?? [] }, row)) : store.rows.size;
+      if (!dump) {
+        tables[t] = store.rows.size;
+      } else if (t === 'app_secrets') {
+        tables[t] = [...store.rows.values()].map((r) => ({ name: r.name, value: '<redacted>' }));
+      } else {
+        const hidden = withHidden ? (t === world.auth.table ? [world.auth.password] : []) : world.meta[t]?.hidden ?? [];
+        tables[t] = [...store.rows.values()].map((row) => presentRow({ schema: world.schema[t], hidden }, row));
+      }
     }
     apps[name] = {
       tables,
       refresh_tokens: { total: app.refresh.length, active: app.refresh.filter((t) => t.revoked_at === null && t.expires_at > nowMs).length },
       outbox: app.outbox.length,
+      secrets: { code_pepper: pepperStatus(app) },
     };
   }
   return {
@@ -1689,15 +1933,29 @@ async function devRoute(world, r) {
     world.reset();
     return ok({ reset: true });
   }
-  if (name === '__state' && r.method === 'GET') return ok(stateSummary(world, r.query.dump === '1'));
+  if (name === '__state' && r.method === 'GET') return ok(stateSummary(world, r.query.dump === '1', r.query.hidden === '1'));
   if (name === '__clock' && r.method === 'POST') {
     const b = devBody(r);
     if (b.reset === true) world.clockOffsetMs = 0;
+    else if (typeof b.advance_ms === 'number' && Number.isFinite(b.advance_ms)) world.clockOffsetMs += Math.round(b.advance_ms);
     else if (typeof b.advance_seconds === 'number' && Number.isFinite(b.advance_seconds)) world.clockOffsetMs += Math.round(b.advance_seconds * 1000);
-    else throw E.unprocessable('Send {"advance_seconds": N} or {"reset": true}');
+    else throw E.unprocessable('Send {"advance_ms": N}, {"advance_seconds": N} or {"reset": true}');
     world.markDirty();
-    return ok({ now: fmtDatetime(world.now(), 3), clock_offset_seconds: Math.round(world.clockOffsetMs / 1000) });
+    return ok({ now: fmtDatetime(world.now(), 3), now_ms: Math.floor(world.now()), clock_offset_seconds: Math.round(world.clockOffsetMs / 1000) });
   }
+  // The operator's seed step: put the code pepper into the three states the triggers tell apart (see seed.sql).
+  if (name === '__pepper' && r.method === 'POST') {
+    const b = devBody(r);
+    const app = world.apps.get(b.app || world.opts.apps[0]);
+    if (!app || !world.schema.app_secrets) throw E.notFound();
+    if (!['set', 'placeholder', 'missing'].includes(b.mode)) throw E.unprocessable('mode must be set, placeholder or missing', { field: 'mode' });
+    app.tables.app_secrets.rows.clear();
+    if (b.mode === 'set') seedPepper(world, app, true);
+    else if (b.mode === 'placeholder') app.tables.app_secrets.rows.set('code_pepper', { name: 'code_pepper', value: 'REPLACE-ME-the-operator-sets-a-random-64-hex-value-here-never-commit-it', updated_at: tsNow(world, 3) });
+    world.markDirty();
+    return ok({ code_pepper: pepperStatus(app) });
+  }
+  if (name === '__log' && r.method === 'GET') return ok({ lines: world.accessLog });
   if (name === '__outbox' && r.method === 'GET') {
     const app = world.apps.get(r.query.app || world.opts.apps[0]);
     if (!app) throw E.notFound();
@@ -1770,7 +2028,7 @@ function errorResult(e, id, world) {
     const conflict = e.kind === 'dup' || e.kind === 'fk' || e.kind === 'null';
     const status = conflict ? 409 : 500;
     const message = conflict ? DB_CONFLICT : 'Internal server error';
-    if (!world.opts.quiet) console.log(`  [db ${status}] ${e.message}`);
+    if (!world.opts.quiet) console.log(`  [db ${status}] ${e.message}`); // messages name a column, never a value
     return { status, headers: { 'X-Fake-Db-Error': e.message.replace(/[^\x20-\x7E]/g, '?') }, body: { ok: false, error: { status, message, request_id: id } } };
   }
   console.error('fake server bug:', e);
@@ -1827,9 +2085,14 @@ async function onRequest(world, req, res) {
   } catch (e) {
     result = errorResult(e, id, world);
   }
-  if (!world.opts.quiet) {
+  {
+    // The access log: method, PATH (never the query string, never a body or a header), status, time. A join code only ever travels in
+    // a request body, so it cannot get here; smoke.mjs and tests/logscan.mjs prove it. It is kept in memory for GET /__log.
     const tag = drop ? ` DROPPED (${drop})` : '';
-    console.log(`${r ? r.method : '?'} ${r ? r.pathname : req.url} -> ${drop ? '-' : result.status} ${Date.now() - t0}ms${tag}`);
+    const line = `${r ? r.method : '?'} ${r ? r.pathname : String(req.url).split('?')[0]} -> ${drop ? '-' : result.status} ${Date.now() - t0}ms${tag}`;
+    world.accessLog.push(line);
+    if (world.accessLog.length > 20000) world.accessLog.splice(0, 5000);
+    if (!world.opts.quiet) console.log(line);
   }
   if (drop) {
     req.socket.destroy(); // the client sees a network failure, never a response
@@ -1902,6 +2165,8 @@ const FLAG_DEFS = {
   apps: ['apps', 'list'],
   config: ['config', 'path'],
   schema: ['schema', 'path'],
+  triggers: ['triggers', 'path'],
+  'no-pepper': ['noPepper', 'bool'],
   'access-ttl': ['accessTtl', 'int'],
   'refresh-ttl': ['refreshTtl', 'int'],
   'jwt-leeway': ['jwtLeeway', 'int'],
@@ -1951,9 +2216,10 @@ export function parseArgs(argv) {
 
 const USAGE = `Usage: node server.mjs [--port 8787] [--apps shoppinglistdev,shoppinglist] [--access-ttl 900] [--refresh-ttl 1209600]
                       [--data file.json] [--rate-limit 0] [--rate-window 60] [--auth-rate-limit 0] [--login-lockout 0]
-                      [--lockout-seconds 900] [--jwt-leeway 30] [--mail] [--require-verified] [--quiet]
-                      [--config ../shoppinglist.config.json] [--schema ../schema.sql]
-See README.md. Dev endpoints: POST /__reset, GET /__state[?dump=1], POST|GET|DELETE /__fault, POST /__clock, GET /__outbox.`;
+                      [--lockout-seconds 900] [--jwt-leeway 30] [--mail] [--require-verified] [--no-pepper] [--quiet]
+                      [--config ../shoppinglist.config.json] [--schema ../schema.sql] [--triggers ../triggers.sql]
+See README.md. Dev endpoints: POST /__reset, GET /__state[?dump=1[&hidden=1]], POST|GET|DELETE /__fault, POST /__clock,
+GET /__outbox, GET /__log, POST /__pepper.`;
 
 async function main() {
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
