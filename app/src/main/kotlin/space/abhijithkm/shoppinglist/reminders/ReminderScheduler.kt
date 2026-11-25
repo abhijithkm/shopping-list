@@ -8,6 +8,7 @@ import space.abhijithkm.shoppinglist.data.local.ItemDao
 import space.abhijithkm.shoppinglist.data.local.ReminderDao
 import space.abhijithkm.shoppinglist.data.local.ReminderRepeat
 import space.abhijithkm.shoppinglist.data.local.ShoppingListDao
+import space.abhijithkm.shoppinglist.data.repository.NotificationPrefs
 import space.abhijithkm.shoppinglist.surfaces.SurfaceNotifier
 
 /** The time zone reminders are computed in; the device's zone, replaceable in tests. */
@@ -35,6 +36,7 @@ class ReminderScheduler @Inject constructor(
     private val clock: Clock,
     private val zones: ZoneProvider,
     private val notifier: SurfaceNotifier,
+    private val prefs: NotificationPrefs,
 ) {
     /**
      * One alarm per enabled reminder of a live list, none for anything else (disabled reminder, deleted or archived list,
@@ -65,7 +67,7 @@ class ReminderScheduler @Inject constructor(
     /** An alarm went off (or a missed one is caught up): decide, then post the notification if it is allowed. */
     suspend fun fire(listId: String) {
         val decision = onFired(listId)
-        if (decision is ReminderDecision.Post && notifier.canNotify()) {
+        if (decision is ReminderDecision.Post && prefs.remindersEnabled() && notifier.canNotify()) {
             notifier.postReminder(listId, decision.listName, decision.openCount)
         }
     }

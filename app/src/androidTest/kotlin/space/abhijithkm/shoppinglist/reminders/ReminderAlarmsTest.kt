@@ -18,6 +18,7 @@ import space.abhijithkm.shoppinglist.data.local.AppDatabase
 import space.abhijithkm.shoppinglist.data.local.ReminderEntity
 import space.abhijithkm.shoppinglist.data.local.ReminderRepeat
 import space.abhijithkm.shoppinglist.data.local.ShoppingListEntity
+import space.abhijithkm.shoppinglist.data.repository.NotificationPrefs
 import space.abhijithkm.shoppinglist.surfaces.SurfaceNotifier
 
 /**
@@ -59,6 +60,11 @@ class ReminderAlarmsTest {
         DeviceClock(),
         { ZoneId.systemDefault() },
         SurfaceNotifier(context),
+        object : NotificationPrefs {
+            override suspend fun remindersEnabled() = true
+
+            override suspend fun shoppingModeEnabled() = true
+        },
     )
 
     @Test

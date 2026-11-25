@@ -20,6 +20,7 @@ import space.abhijithkm.shoppinglist.data.local.ReminderRepeat
 import space.abhijithkm.shoppinglist.data.local.ShoppingItemEntity
 import space.abhijithkm.shoppinglist.data.local.ShoppingListDao
 import space.abhijithkm.shoppinglist.data.local.ShoppingListEntity
+import space.abhijithkm.shoppinglist.data.repository.NotificationPrefs
 import space.abhijithkm.shoppinglist.surfaces.SurfaceNotifier
 
 class ReminderSchedulerTest {
@@ -53,7 +54,15 @@ class ReminderSchedulerTest {
     private val gateway = RecordingGateway()
     private val clock = FakeClock(utc(10, 8))
 
-    private fun scheduler() = ReminderScheduler(reminders, lists, items, gateway, clock, { zone }, notifier)
+    private var remindersOn = true
+
+    private val prefs = object : NotificationPrefs {
+        override suspend fun remindersEnabled() = remindersOn
+
+        override suspend fun shoppingModeEnabled() = true
+    }
+
+    private fun scheduler() = ReminderScheduler(reminders, lists, items, gateway, clock, { zone }, notifier, prefs)
 
     private fun list(archived: Boolean = false, deletedAt: Long? = null) =
         ShoppingListEntity(id = "l1", name = "Groceries", isArchived = archived, createdAt = 1L, updatedAt = 1L, deletedAt = deletedAt)
@@ -214,6 +223,18 @@ class ReminderSchedulerTest {
         scheduler().rescheduleAll(catchUp = false)
 
         verify(exactly = 0) { notifier.postReminder(any(), any(), any()) }
+    }
+
+    @Test
+    fun theGlobalRemindersSwitchOffDoesNotPostButStillSchedulesTheNext() = runTest {
+        remindersOn = false
+        clock.now = utc(10, 9, 5)
+        given(daily(9), open = 2)
+
+        scheduler().fire("l1")
+
+        verify(exactly = 0) { notifier.postReminder(any(), any(), any()) }
+        assertEquals(utc(11, 9), gateway.scheduled["l1"])
     }
 
     @Test
