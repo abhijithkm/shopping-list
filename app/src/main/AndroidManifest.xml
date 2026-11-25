@@ -25,6 +25,18 @@
             </intent-filter>
         </activity>
 
+        <receiver
+            android:name=".widget.ShoppingListWidgetReceiver"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/shopping_list_widget_info" />
+        </receiver>
+
         <!-- WorkManager is initialised by ShoppingListApp (Configuration.Provider) so workers can use Hilt. -->
         <provider
             android:name="androidx.startup.InitializationProvider"
