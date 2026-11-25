@@ -13,6 +13,17 @@
         <item quantity="other">%d items left</item>
     </plurals>
     <string name="widget_description">Check off and add items from one of your lists</string>
+    <string name="widget_not_available">This list is not available any more. Tap to choose another.</string>
+    <string name="widget_not_configured">Tap to choose a list</string>
+    <string name="widget_progress">%1$d of %2$d left</string>
+    <string name="widget_all_done">All done</string>
+    <string name="widget_no_items">No items yet</string>
+    <string name="widget_add">Add item</string>
+    <string name="widget_config_title">Choose a list</string>
+    <string name="widget_config_empty">Create a list in the app first, then add the widget again.</string>
+    <string name="quick_add_title">Add item</string>
+    <string name="quick_add_confirm">Add</string>
+    <string name="quick_add_cancel">Cancel</string>
 
     <string name="nav_lists">Lists</string>
     <string name="nav_categories">Categories</string>

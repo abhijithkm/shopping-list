@@ -25,7 +25,7 @@ object ReminderMath {
     fun nextFire(now: Long, zone: ZoneId, r: ReminderEntity): Long? {
         if (!r.enabled) return null
         if (r.repeat == ReminderRepeat.NONE) return r.oneTimeAtMillis?.takeIf { it > now }
-        val today = LocalDate.ofInstant(Instant.ofEpochMilli(now), zone)
+        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
         for (offset in 0..SEARCH_DAYS) {
             val date = today.plusDays(offset.toLong())
             if (!allowed(date, r)) continue
@@ -39,7 +39,7 @@ object ReminderMath {
     fun lastOccurrenceAtOrBefore(now: Long, zone: ZoneId, r: ReminderEntity): Long? {
         if (!r.enabled) return null
         if (r.repeat == ReminderRepeat.NONE) return r.oneTimeAtMillis?.takeIf { it <= now }
-        val today = LocalDate.ofInstant(Instant.ofEpochMilli(now), zone)
+        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
         for (offset in 0..SEARCH_DAYS) {
             val date = today.minusDays(offset.toLong())
             if (!allowed(date, r)) continue

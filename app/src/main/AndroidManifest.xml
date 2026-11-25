@@ -42,6 +42,21 @@
                 android:resource="@xml/shopping_list_widget_info" />
         </receiver>
 
+        <activity
+            android:name=".widget.WidgetConfigActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".widget.QuickAddActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:theme="@style/Theme.ShoppingList.Translucent"
+            android:windowSoftInputMode="stateVisible|adjustResize" />
+
         <receiver
             android:name=".surfaces.MarkAllDoneReceiver"
             android:exported="false" />
