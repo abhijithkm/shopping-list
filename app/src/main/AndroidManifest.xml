@@ -5,6 +5,8 @@
     <!-- The app works fully offline; the network is used only for AppHub sign-in and sync. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Asked in context (when a reminder or shopping mode is switched on); the app works fully without it. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".ShoppingListApp"
@@ -37,6 +39,10 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/shopping_list_widget_info" />
         </receiver>
+
+        <receiver
+            android:name=".surfaces.MarkAllDoneReceiver"
+            android:exported="false" />
 
         <!-- WorkManager is initialised by ShoppingListApp (Configuration.Provider) so workers can use Hilt. -->
         <provider

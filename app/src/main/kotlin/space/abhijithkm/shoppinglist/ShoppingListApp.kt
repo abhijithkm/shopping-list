@@ -13,6 +13,8 @@ import kotlinx.coroutines.launch
 import space.abhijithkm.shoppinglist.core.util.Clock
 import space.abhijithkm.shoppinglist.data.repository.LocalShoppingRepository
 import space.abhijithkm.shoppinglist.data.sync.SyncCoordinator
+import space.abhijithkm.shoppinglist.surfaces.NotificationChannels
+import space.abhijithkm.shoppinglist.surfaces.SurfaceUpdater
 
 @HiltAndroidApp
 class ShoppingListApp : Application(), Configuration.Provider {
@@ -24,6 +26,8 @@ class ShoppingListApp : Application(), Configuration.Provider {
 
     @Inject lateinit var syncCoordinator: SyncCoordinator
 
+    @Inject lateinit var surfaceUpdater: SurfaceUpdater
+
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // WorkManager is initialised on demand with Hilt's worker factory (the default initializer is removed in the manifest).
@@ -34,6 +38,9 @@ class ShoppingListApp : Application(), Configuration.Provider {
         super.onCreate()
         // Sync follows the session: signed in means a run now and after every local change; otherwise nothing runs.
         syncCoordinator.start(appScope)
+        // Widgets, shopping-mode notifications and reminder alarms follow the local data, whoever changed it.
+        NotificationChannels.create(this)
+        surfaceUpdater.start(appScope) { Log.w(TAG, "Surface refresh failed", it) }
         // Deleted lists, items, categories and tags stay recoverable for a week (undo), then go for good.
         appScope.launch {
             // Housekeeping is non-critical: a failure here must never take the app down at start.
