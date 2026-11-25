@@ -38,12 +38,20 @@ class SurfaceNotifierTest {
 
     private fun active(tag: String) = manager.activeNotifications.filter { it.tag == tag }
 
+    /** Posting and cancelling are asynchronous in the system: wait (up to 5 s) until exactly [expected] are showing, then return the count. */
+    private fun awaitActive(tag: String, expected: Int): Int {
+        val deadline = System.currentTimeMillis() + 5_000
+        while (active(tag).size != expected && System.currentTimeMillis() < deadline) Thread.sleep(50)
+        return active(tag).size
+    }
+
     private fun content(listId: String = "l1", name: String = "Groceries", open: Int = 2, total: Int = 3) =
         ShoppingModeContent(listId, name, open, total, listOf("Milk", "Eggs"))
 
     @Test
     fun shoppingModeIsAnOngoingSilentNotificationWithTheCounts() {
         notifier.postShoppingMode(content())
+        assertEquals(1, awaitActive("shopping_mode", 1))
 
         val posted = active("shopping_mode").single()
         assertTrue(posted.notification.flags and Notification.FLAG_ONGOING_EVENT != 0)
@@ -58,7 +66,7 @@ class SurfaceNotifierTest {
         notifier.postShoppingMode(content(open = 3))
         notifier.postShoppingMode(content(open = 2))
 
-        assertEquals(1, active("shopping_mode").size)
+        assertEquals(1, awaitActive("shopping_mode", 1))
     }
 
     @Test
@@ -66,25 +74,28 @@ class SurfaceNotifierTest {
         notifier.postShoppingMode(content("a"))
         notifier.postShoppingMode(content("b"))
         notifier.postShoppingMode(content("c"))
+        assertEquals(3, awaitActive("shopping_mode", 3))
 
         notifier.cancelShoppingModeExcept(setOf("b"))
 
-        assertEquals(1, active("shopping_mode").size)
+        assertEquals(1, awaitActive("shopping_mode", 1))
         assertEquals(notifier.notificationId("b"), active("shopping_mode").single().id)
     }
 
     @Test
     fun cancelExceptWithNothingWantedClearsThemAll() {
         notifier.postShoppingMode(content("a"))
+        assertEquals(1, awaitActive("shopping_mode", 1))
 
         notifier.cancelShoppingModeExcept(emptySet())
 
-        assertTrue(active("shopping_mode").isEmpty())
+        assertEquals(0, awaitActive("shopping_mode", 0))
     }
 
     @Test
     fun aReminderUsesTheRemindersChannelAndGoesAwayWhenTapped() {
         notifier.postReminder("l1", "Groceries", 5)
+        assertEquals(1, awaitActive("reminder", 1))
 
         val posted = active("reminder").single()
         assertEquals(NotificationChannels.REMINDERS, posted.notification.channelId)
