@@ -27,4 +27,12 @@ class SettingsViewModel @Inject constructor(
     fun setShowCompleted(show: Boolean) {
         viewModelScope.launch { repository.setShowCompleted(show) }
     }
+
+    fun setRemindersEnabled(enabled: Boolean) {
+        viewModelScope.launch { repository.setRemindersEnabled(enabled) }
+    }
+
+    fun setShoppingModeEnabled(enabled: Boolean) {
+        viewModelScope.launch { repository.setShoppingModeEnabled(enabled) }
+    }
 }

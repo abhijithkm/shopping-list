@@ -12,6 +12,25 @@
         <item quantity="one">%d item left</item>
         <item quantity="other">%d items left</item>
     </plurals>
+    <string name="reminder_menu">Reminder</string>
+    <string name="shopping_mode_turn_on">Turn on shopping mode</string>
+    <string name="shopping_mode_turn_off">Turn off shopping mode</string>
+    <string name="reminder_title">Reminder</string>
+    <string name="reminder_repeat_once">Once</string>
+    <string name="reminder_repeat_daily">Daily</string>
+    <string name="reminder_repeat_weekly">Weekly</string>
+    <string name="reminder_date">Date</string>
+    <string name="reminder_time">Time</string>
+    <string name="reminder_only_if_items">Only if items are left</string>
+    <string name="reminder_turn_off">Turn off reminder</string>
+    <string name="reminder_notifications_off">Notifications are off, so this reminder will not show.</string>
+    <string name="reminder_open_settings">Open settings</string>
+    <string name="settings_notifications">Notifications</string>
+    <string name="settings_reminders">Reminders</string>
+    <string name="settings_reminders_summary">Timed reminders for your lists</string>
+    <string name="settings_shopping_mode">Shopping mode</string>
+    <string name="settings_shopping_mode_summary">An ongoing notification while you shop</string>
+    <string name="settings_notifications_off">Notifications are off for this app. Tap to open settings.</string>
     <string name="widget_description">Check off and add items from one of your lists</string>
     <string name="widget_not_available">This list is not available any more. Tap to choose another.</string>
     <string name="widget_not_configured">Tap to choose a list</string>

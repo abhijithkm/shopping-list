@@ -97,6 +97,9 @@ import space.abhijithkm.shoppinglist.core.model.ItemUpdate
 import space.abhijithkm.shoppinglist.core.model.Limits
 import space.abhijithkm.shoppinglist.core.util.formatQuantityAndUnit
 import space.abhijithkm.shoppinglist.feature.lists.ListEditDialog
+import space.abhijithkm.shoppinglist.feature.reminders.ReminderSheet
+import space.abhijithkm.shoppinglist.feature.reminders.ReminderViewModel
+import space.abhijithkm.shoppinglist.feature.reminders.rememberNotificationPermissionRequester
 import space.abhijithkm.shoppinglist.ui.NoInsets
 import space.abhijithkm.shoppinglist.ui.components.displayName
 
@@ -152,7 +155,23 @@ fun ListDetailScreen(
             onClearFilter = viewModel::clearFilter,
         )
     }
-    ListDetailContent(state = state, actions = actions, onBack = onBack)
+    // The per-list reminder and shopping-mode switches live in their own view model (local to the device, never synced).
+    val surfaces: ReminderViewModel = hiltViewModel()
+    val shoppingMode by surfaces.shoppingMode.collectAsStateWithLifecycle()
+    var reminderOpen by rememberSaveable { mutableStateOf(false) }
+    val askNotificationPermission = rememberNotificationPermissionRequester { }
+    ListDetailContent(
+        state = state,
+        actions = actions,
+        onBack = onBack,
+        shoppingMode = shoppingMode,
+        onToggleShoppingMode = {
+            surfaces.setShoppingMode(!shoppingMode)
+            if (!shoppingMode) askNotificationPermission() // asked in context: when shopping mode is switched on
+        },
+        onOpenReminder = { reminderOpen = true },
+    )
+    if (reminderOpen) ReminderSheet(onDismiss = { reminderOpen = false })
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -161,6 +180,10 @@ fun ListDetailContent(
     state: ListDetailUiState,
     actions: ListDetailActions,
     onBack: () -> Unit = {},
+    /** Whether this list's ongoing "Shopping mode" notification is switched on (a device-only setting). */
+    shoppingMode: Boolean = false,
+    onToggleShoppingMode: () -> Unit = {},
+    onOpenReminder: () -> Unit = {},
 ) {
     val list = state.list
     val snackbarHostState = remember { SnackbarHostState() }
@@ -272,6 +295,26 @@ fun ListDetailContent(
                                             showUndo(message) { actions.onRestoreItems(ids) }
                                         }
                                     }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.reminder_menu)) },
+                                onClick = {
+                                    menuOpen = false
+                                    onOpenReminder()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        stringResource(
+                                            if (shoppingMode) R.string.shopping_mode_turn_off else R.string.shopping_mode_turn_on,
+                                        ),
+                                    )
+                                },
+                                onClick = {
+                                    menuOpen = false
+                                    onToggleShoppingMode()
                                 },
                             )
                             HorizontalDivider()
