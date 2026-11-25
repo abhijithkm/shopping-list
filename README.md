@@ -1,12 +1,12 @@
 # Shopping List
 
-A native Android shopping-list app: create a list, add items, tick them off. It is **offline-first** and works with **no account**. Signing in (optional) syncs lists across devices; shared lists (registered users only) come later. The only backend is the owner's own AppHub, with the database built **in the cloud only**.
+A native Android shopping-list app: create a list, add items, tick them off. It is **offline-first** and works with **no account**. Signing in (optional) syncs lists across devices. A home-screen widget, per-list timed reminders and an ongoing "Shopping mode" notification work on the device without a network. Shared lists are parked for a later version. The only backend is the owner's own AppHub, with the database built **in the cloud only**.
 
-Stack: Kotlin, Jetpack Compose (Material 3), Room (source of truth), Hilt, DataStore, Retrofit/OkHttp with kotlinx.serialization, WorkManager; Glance widgets arrive in a later phase.
+Stack: Kotlin, Jetpack Compose (Material 3), Room (source of truth), Hilt, DataStore, Retrofit/OkHttp with kotlinx.serialization, WorkManager, Glance widget.
 
 ## Status
 
-Phases 0 (audit), 1 (Android foundation), 2 (guest lists, all offline) and 3 (AppHub sign-in, sync and guest-to-account migration) are implemented. Phase 3 is verified against fake AppHub servers (an in-memory one in the tests and a faithful Node one for the emulator) and against the real cloud dev app `shoppinglistdev` (created 2026-11-16; schema, config and the checks are in the ledger in [backend/apphub/README.md](backend/apphub/README.md)). The production app `shoppinglist` has not been created. See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for exactly what was verified and what was not.
+Phases 0 (audit), 1 (Android foundation), 2 (guest lists, all offline) and 3 (AppHub sign-in, sync and guest-to-account migration) are implemented. Phase 3 is verified against fake AppHub servers (an in-memory one in the tests and a faithful Node one for the emulator) and against the real cloud dev app `shoppinglistdev` (created 2026-11-16; schema, config and the checks are in the ledger in [backend/apphub/README.md](backend/apphub/README.md)). The production app `shoppinglist` has not been created. Phase 5 (widget, timed reminders, shopping mode) is implemented on `feature/phase-5-widgets-reminders` and was run by hand on an Android 16 emulator; Phase 4 (sharing) is parked; Phase 6 (QA, release build) is next. See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for exactly what was verified and what was not.
 
 ## Requirements
 
