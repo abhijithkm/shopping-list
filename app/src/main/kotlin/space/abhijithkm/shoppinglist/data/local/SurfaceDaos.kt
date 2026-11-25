@@ -22,6 +22,10 @@ interface ReminderDao {
     @Query("SELECT * FROM reminders WHERE enabled = 1")
     suspend fun allEnabled(): List<ReminderEntity>
 
+    /** Every reminder, disabled ones too: the scheduler must cancel the alarm of a reminder that was switched off. */
+    @Query("SELECT * FROM reminders")
+    suspend fun all(): List<ReminderEntity>
+
     @Query("UPDATE reminders SET lastFiredAt = :at WHERE listId = :listId")
     suspend fun markFired(listId: String, at: Long)
 

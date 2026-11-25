@@ -81,6 +81,16 @@ class SurfaceDaoTest {
     }
 
     @Test
+    fun allReturnsDisabledRemindersToo() = runTest {
+        list("a")
+        list("b")
+        db.reminderDao().upsert(ReminderEntity(listId = "a"))
+        db.reminderDao().upsert(ReminderEntity(listId = "b", enabled = false))
+
+        assertEquals(listOf("a", "b"), db.reminderDao().all().map { it.listId }.sorted())
+    }
+
+    @Test
     fun markFiredAndDisableUpdateTheRow() = runTest {
         list()
         db.reminderDao().upsert(ReminderEntity(listId = "l1"))
