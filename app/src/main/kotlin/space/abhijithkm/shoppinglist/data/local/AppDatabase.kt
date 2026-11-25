@@ -11,6 +11,7 @@ import androidx.room.RoomDatabase
  *  - v1: lists, items, categories, tags, item_tags (Phases 1 and 2).
  *  - v2: sync bookkeeping, `sync_entities` and `sync_state` (Phase 3). Added tables only, so Room can
  *    generate the migration.
+ *  - v3: `reminders` and `list_prefs` (Phase 5, local-only, never synced). Added tables only.
  */
 @Database(
     entities = [
@@ -21,10 +22,12 @@ import androidx.room.RoomDatabase
         ItemTagCrossRef::class,
         SyncEntityEntity::class,
         SyncStateEntity::class,
+        ReminderEntity::class,
+        ListPrefsEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 1, to = 2)],
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3)],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun listDao(): ShoppingListDao
@@ -36,4 +39,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun tagDao(): TagDao
 
     abstract fun syncDao(): SyncDao
+
+    abstract fun reminderDao(): ReminderDao
+
+    abstract fun listPrefsDao(): ListPrefsDao
 }

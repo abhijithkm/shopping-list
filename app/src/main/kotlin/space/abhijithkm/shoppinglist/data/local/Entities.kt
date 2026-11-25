@@ -133,6 +133,54 @@ data class SyncEntityEntity(
     val blockedAtRevision: Int = 0,
 )
 
+/** How a list's reminder repeats. */
+enum class ReminderRepeat { NONE, DAILY, WEEKLY }
+
+/**
+ * A list's timed reminder (one per list). Local to the device: never synced. [daysOfWeekMask] has bit 0 = Monday
+ * up to bit 6 = Sunday (used when [repeat] is WEEKLY); [oneTimeAtMillis] is used when [repeat] is NONE.
+ * The row outlives a soft-deleted list (a restored list gets its reminder back) and goes with a purged one.
+ */
+@Entity(
+    tableName = "reminders",
+    foreignKeys = [
+        ForeignKey(
+            entity = ShoppingListEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["listId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+)
+data class ReminderEntity(
+    @PrimaryKey val listId: String,
+    val enabled: Boolean = true,
+    val repeat: ReminderRepeat = ReminderRepeat.NONE,
+    val hour: Int = 9,
+    val minute: Int = 0,
+    val daysOfWeekMask: Int = 0,
+    val oneTimeAtMillis: Long? = null,
+    val onlyIfItemsRemain: Boolean = true,
+    val lastFiredAt: Long? = null,
+)
+
+/** Per-list switches that live only on this device (kept out of `lists` so the synced entity does not change). */
+@Entity(
+    tableName = "list_prefs",
+    foreignKeys = [
+        ForeignKey(
+            entity = ShoppingListEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["listId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+)
+data class ListPrefsEntity(
+    @PrimaryKey val listId: String,
+    val shoppingMode: Boolean = false,
+)
+
 /** Small key-value store for sync cursors and the last run summary, per account. */
 @Entity(tableName = "sync_state", primaryKeys = ["accountId", "key"])
 data class SyncStateEntity(
