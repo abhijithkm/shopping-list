@@ -110,6 +110,10 @@ interface ShoppingListDao {
 
     @Query("SELECT DISTINCT accountId FROM lists WHERE accountId IS NOT NULL")
     suspend fun accountIds(): List<String>
+
+    /** The lists whose "Shopping mode" switch is on (deleted and archived ones included: callers decide what to show). */
+    @Query("SELECT l.* FROM lists l JOIN list_prefs p ON p.listId = l.id WHERE p.shoppingMode = 1")
+    suspend fun shoppingModeLists(): List<ShoppingListEntity>
 }
 
 @Dao
@@ -145,6 +149,10 @@ interface ItemDao {
 
     @Query("SELECT id FROM items WHERE listId = :listId AND deletedAt IS NULL AND isBought = 1")
     suspend fun boughtIds(listId: String): List<String>
+
+    /** Ticks every open item of a list in one statement ("Mark all done"); already-bought and deleted items are left alone. */
+    @Query("UPDATE items SET isBought = 1, boughtAt = :now, updatedAt = :now, revision = revision + 1 WHERE listId = :listId AND deletedAt IS NULL AND isBought = 0")
+    suspend fun markAllBought(listId: String, now: Long)
 
     @Query("UPDATE items SET deletedAt = :now, updatedAt = :now, revision = revision + 1 WHERE id IN (:ids)")
     suspend fun softDeleteMany(ids: List<String>, now: Long)
