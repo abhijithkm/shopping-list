@@ -25,6 +25,7 @@
     <string name="reminder_turn_off">Turn off reminder</string>
     <string name="reminder_notifications_off">Notifications are off, so this reminder will not show.</string>
     <string name="reminder_open_settings">Open settings</string>
+    <string name="shopping_mode_notifications_off">Notifications are off, so the shopping-mode notification will not show.</string>
     <string name="settings_notifications">Notifications</string>
     <string name="settings_reminders">Reminders</string>
     <string name="settings_reminders_summary">Timed reminders for your lists</string>

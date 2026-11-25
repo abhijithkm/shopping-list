@@ -226,6 +226,47 @@ class ReminderSchedulerTest {
     }
 
     @Test
+    fun aDueButUndeliveredReminderIsReArmedAtOnceNotPushedToTomorrow() = runTest {
+        // The 09:00 alarm is late (inexact alarms can be); a tick at 09:00:10 wrote to the database and re-ran the scheduling.
+        clock.now = utc(10, 9, 0) + 10_000L
+        given(daily(9, lastFiredAt = utc(9, 9, 5)))
+
+        scheduler().rescheduleAll(catchUp = false)
+
+        assertEquals(clock.now + ReminderScheduler.DUE_REARM_DELAY_MS, gateway.scheduled["l1"])
+    }
+
+    @Test
+    fun aDueReminderThatAlreadyFiredIsScheduledForTomorrow() = runTest {
+        clock.now = utc(10, 9, 0) + 10_000L
+        given(daily(9, lastFiredAt = utc(10, 9, 0) + 5_000L))
+
+        scheduler().rescheduleAll(catchUp = false)
+
+        assertEquals(utc(11, 9), gateway.scheduled["l1"])
+    }
+
+    @Test
+    fun anOccurrenceOlderThanTheDueWindowIsNotReArmed() = runTest {
+        clock.now = utc(10, 9, 0) + ReminderScheduler.DUE_WINDOW_MS + 60_000L
+        given(daily(9, lastFiredAt = utc(9, 9, 5)))
+
+        scheduler().rescheduleAll(catchUp = false)
+
+        assertEquals(utc(11, 9), gateway.scheduled["l1"])
+    }
+
+    @Test
+    fun aDueOneTimeReminderIsReArmedToo() = runTest {
+        clock.now = utc(10, 9, 0) + 30_000L
+        given(ReminderEntity(listId = "l1", repeat = ReminderRepeat.NONE, oneTimeAtMillis = utc(10, 9, 0)))
+
+        scheduler().rescheduleAll(catchUp = false)
+
+        assertEquals(clock.now + ReminderScheduler.DUE_REARM_DELAY_MS, gateway.scheduled["l1"])
+    }
+
+    @Test
     fun theGlobalRemindersSwitchOffDoesNotPostButStillSchedulesTheNext() = runTest {
         remindersOn = false
         clock.now = utc(10, 9, 5)

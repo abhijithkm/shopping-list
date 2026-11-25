@@ -11,10 +11,12 @@ import kotlinx.coroutines.launch
 import space.abhijithkm.shoppinglist.core.model.AppSettings
 import space.abhijithkm.shoppinglist.core.model.ThemeMode
 import space.abhijithkm.shoppinglist.data.repository.SettingsRepository
+import space.abhijithkm.shoppinglist.surfaces.SurfaceRefresher
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val repository: SettingsRepository,
+    private val refresher: SurfaceRefresher,
 ) : ViewModel() {
 
     val settings: StateFlow<AppSettings> = repository.settings
@@ -28,11 +30,23 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { repository.setShowCompleted(show) }
     }
 
+    // These switches live in DataStore, which the surface updater does not watch: redraw the notifications and alarms ourselves.
     fun setRemindersEnabled(enabled: Boolean) {
-        viewModelScope.launch { repository.setRemindersEnabled(enabled) }
+        viewModelScope.launch {
+            repository.setRemindersEnabled(enabled)
+            refresher.refreshAll()
+        }
     }
 
     fun setShoppingModeEnabled(enabled: Boolean) {
-        viewModelScope.launch { repository.setShoppingModeEnabled(enabled) }
+        viewModelScope.launch {
+            repository.setShoppingModeEnabled(enabled)
+            refresher.refreshAll()
+        }
+    }
+
+    /** Redraws everything now, e.g. after the owner re-enabled notifications in the system settings. */
+    fun refreshSurfaces() {
+        viewModelScope.launch { refresher.refreshAll() }
     }
 }

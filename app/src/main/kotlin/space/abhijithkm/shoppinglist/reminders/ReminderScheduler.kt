@@ -6,6 +6,7 @@ import javax.inject.Singleton
 import space.abhijithkm.shoppinglist.core.util.Clock
 import space.abhijithkm.shoppinglist.data.local.ItemDao
 import space.abhijithkm.shoppinglist.data.local.ReminderDao
+import space.abhijithkm.shoppinglist.data.local.ReminderEntity
 import space.abhijithkm.shoppinglist.data.local.ReminderRepeat
 import space.abhijithkm.shoppinglist.data.local.ShoppingListDao
 import space.abhijithkm.shoppinglist.data.repository.NotificationPrefs
@@ -59,9 +60,28 @@ class ReminderScheduler @Inject constructor(
                 if (missed != null && now - missed <= ReminderMath.GRACE_MS && !alreadyFired) fire(listId)
             }
             val current = reminders.get(listId) ?: continue
-            val next = if (current.enabled) ReminderMath.nextFire(now, zone, current) else null
+            val next = if (current.enabled) nextAlarm(now, zone, current) else null
             if (next == null) gateway.cancel(listId) else gateway.schedule(listId, next)
         }
+    }
+
+    /**
+     * The time of the next alarm. A reminder that is due but has not fired yet (an inexact alarm can be late) is re-armed at
+     * once: without this, any change to the data at 09:00:10 would replace the pending 09:00 alarm with tomorrow's and the
+     * reminder would be lost. A reminder saved after its time carries a baseline in `lastFiredAt`, so it is never "due".
+     */
+    private fun nextAlarm(now: Long, zone: ZoneId, r: ReminderEntity): Long? {
+        val lastDue = ReminderMath.lastOccurrenceAtOrBefore(now, zone, r)
+        val due = lastDue != null && now - lastDue <= DUE_WINDOW_MS && (r.lastFiredAt ?: Long.MIN_VALUE) < lastDue
+        return if (due) now + DUE_REARM_DELAY_MS else ReminderMath.nextFire(now, zone, r)
+    }
+
+    companion object {
+        /** An occurrence that passed less than this long ago, unfired, is still delivered (a late alarm); older ones are only caught up at boot. */
+        const val DUE_WINDOW_MS = 10L * 60 * 1000
+
+        /** How soon a due, unfired reminder is re-armed. */
+        const val DUE_REARM_DELAY_MS = 1_000L
     }
 
     /** An alarm went off (or a missed one is caught up): decide, then post the notification if it is allowed. */

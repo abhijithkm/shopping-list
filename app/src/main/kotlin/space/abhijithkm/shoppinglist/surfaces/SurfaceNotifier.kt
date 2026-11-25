@@ -1,6 +1,7 @@
 package space.abhijithkm.shoppinglist.surfaces
 
 import android.annotation.SuppressLint
+import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -73,6 +74,11 @@ class SurfaceNotifier @Inject constructor(
     @SuppressLint("MissingPermission") // canNotify() checks the permission
     fun postReminder(listId: String, listName: String, openCount: Int) {
         if (!canNotify()) return
+        manager.notify(TAG_REMINDER, notificationId(listId), buildReminder(listId, listName, openCount))
+    }
+
+    /** The reminder notification as built, apart from posting it (the system rewrites some fields, e.g. `defaults`, when it accepts one). */
+    internal fun buildReminder(listId: String, listName: String, openCount: Int): Notification {
         val id = notificationId(listId)
         val open = PendingIntent.getActivity(
             context,
@@ -80,15 +86,16 @@ class SurfaceNotifier @Inject constructor(
             openListIntent(context, listId),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val notification = NotificationCompat.Builder(context, NotificationChannels.REMINDERS)
+        return NotificationCompat.Builder(context, NotificationChannels.REMINDERS)
             .setSmallIcon(R.drawable.ic_stat_notify)
             .setContentTitle(listName)
             .setContentText(context.resources.getQuantityString(R.plurals.reminder_items_left, openCount, openCount))
+            // Android 7 and 7.1 have no channels (minSdk is 24): without defaults the reminder would arrive silent. Ignored from Android 8.
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setContentIntent(open)
             .build()
-        manager.notify(TAG_REMINDER, id, notification)
     }
 
     private companion object {

@@ -65,6 +65,7 @@ fun ReminderSheet(onDismiss: () -> Unit, viewModel: ReminderViewModel = hiltView
     val context = LocalContext.current
     var notificationsOff by remember { mutableStateOf(!notificationsEnabled(context)) }
     val requestPermission = rememberNotificationPermissionRequester {
+        viewModel.refreshSurfaces() // the permission changed, which no database write announces
         if (notificationsEnabled(context)) onDismiss() else notificationsOff = true
     }
     ModalBottomSheet(onDismissRequest = onDismiss) {

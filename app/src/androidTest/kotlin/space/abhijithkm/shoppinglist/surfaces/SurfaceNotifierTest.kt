@@ -13,6 +13,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -102,6 +103,13 @@ class SurfaceNotifierTest {
         assertTrue(posted.notification.flags and Notification.FLAG_AUTO_CANCEL != 0)
         assertNotNull(posted.notification.contentIntent)
         assertNull(active("shopping_mode").firstOrNull())
+    }
+
+    @Test
+    fun aReminderCarriesTheDefaultSoundAndVibrationForDevicesWithoutChannels() {
+        // From Android 8 the platform builder clears `defaults` for channel notifications (sound comes from the channel), so only API 24-25 can show it.
+        assumeTrue(Build.VERSION.SDK_INT < 26)
+        assertEquals(Notification.DEFAULT_ALL, notifier.buildReminder("l1", "Groceries", 5).defaults)
     }
 
     @Test

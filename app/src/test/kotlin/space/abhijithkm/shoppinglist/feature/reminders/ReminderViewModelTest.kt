@@ -23,6 +23,7 @@ import org.junit.Test
 import space.abhijithkm.shoppinglist.data.local.ReminderEntity
 import space.abhijithkm.shoppinglist.data.local.ReminderRepeat
 import space.abhijithkm.shoppinglist.data.repository.SurfacePrefsRepository
+import space.abhijithkm.shoppinglist.surfaces.SurfaceRefresher
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReminderViewModelTest {
@@ -43,7 +44,16 @@ class ReminderViewModelTest {
     @After
     fun tearDown() = Dispatchers.resetMain()
 
-    private fun viewModel() = ReminderViewModel(SavedStateHandle(mapOf("listId" to "l1")), repository)
+    private val refresher = mockk<SurfaceRefresher> { coEvery { refreshAll() } returns Unit }
+
+    private fun viewModel() = ReminderViewModel(SavedStateHandle(mapOf("listId" to "l1")), repository, refresher)
+
+    @Test
+    fun refreshSurfacesRedrawsEverythingNow() = runTest {
+        viewModel().refreshSurfaces()
+
+        coVerify { refresher.refreshAll() }
+    }
 
     @Test
     fun theListIdComesFromTheNavigationArgument() {

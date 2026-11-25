@@ -41,7 +41,7 @@ class MarkAllBoughtTest {
             AppDatabase::class.java,
         ).allowMainThreadQueries().build()
         repo = LocalShoppingRepository(db, clock, TickIds())
-        prefs = SurfacePrefsRepository(db.reminderDao(), db.listPrefsDao())
+        prefs = SurfacePrefsRepository(db.reminderDao(), db.listPrefsDao(), clock)
     }
 
     @After
@@ -132,6 +132,18 @@ class MarkAllBoughtTest {
         assertEquals(ReminderRepeat.WEEKLY, saved.repeat)
         assertEquals(18, saved.hour)
         assertEquals(1, db.reminderDao().allEnabled().size)
+    }
+
+    @Test
+    fun savingAReminderStampsABaselineSoEarlierOccurrencesAreNotMissed() = runTest {
+        val list = repo.createList("Groceries")
+        clock.now = 5_000L
+        prefs.saveReminder(ReminderEntity(listId = list))
+        assertEquals(5_000L, db.reminderDao().get(list)!!.lastFiredAt)
+
+        clock.now = 9_000L
+        prefs.saveReminder(ReminderEntity(listId = list, lastFiredAt = 7_000L))
+        assertEquals(9_000L, db.reminderDao().get(list)!!.lastFiredAt)
     }
 
     @Test

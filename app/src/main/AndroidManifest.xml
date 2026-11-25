@@ -44,7 +44,8 @@
 
         <activity
             android:name=".widget.WidgetConfigActivity"
-            android:exported="true">
+            android:exported="true"
+            android:taskAffinity="">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
             </intent-filter>
@@ -54,6 +55,7 @@
             android:name=".widget.QuickAddActivity"
             android:excludeFromRecents="true"
             android:exported="false"
+            android:taskAffinity=""
             android:theme="@style/Theme.ShoppingList.Translucent"
             android:windowSoftInputMode="stateVisible|adjustResize" />
 

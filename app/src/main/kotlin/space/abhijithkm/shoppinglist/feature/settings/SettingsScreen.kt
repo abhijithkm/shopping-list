@@ -51,7 +51,10 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     var notificationsOff by remember { mutableStateOf(!notificationsEnabled(context)) }
     // The owner may fix it in the system settings and come back: look again every time the screen is resumed.
     LifecycleResumeEffect(Unit) {
-        notificationsOff = !notificationsEnabled(context)
+        val off = !notificationsEnabled(context)
+        // Back from the system settings with notifications switched on again: show what was waiting.
+        if (notificationsOff && !off) viewModel.refreshSurfaces()
+        notificationsOff = off
         onPauseOrDispose { }
     }
     SettingsScreenContent(
