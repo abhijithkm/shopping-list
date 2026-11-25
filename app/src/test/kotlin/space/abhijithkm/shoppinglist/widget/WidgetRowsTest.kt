@@ -1,5 +1,9 @@
 package space.abhijithkm.shoppinglist.widget
 
+import app.cash.turbine.test
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -98,6 +102,35 @@ class WidgetRowsTest {
         assertEquals(1, model.totalCount)
         assertEquals("Groceries", model.listName)
         assertTrue(model.rows.single().bought)
+    }
+
+    @Test
+    fun theModelFollowsTheListAndItsItemsAsTheyChange() = runTest {
+        val listFlow = MutableStateFlow<ShoppingListEntity?>(list())
+        val itemsFlow = MutableStateFlow(listOf(item("a")))
+
+        widgetModels(listFlow, itemsFlow).test {
+            assertEquals(1, content(awaitItem()).openCount)
+
+            itemsFlow.value = listOf(item("a", bought = true))
+            assertEquals(0, content(awaitItem()).openCount)
+
+            itemsFlow.value = listOf(item("a", bought = true), item("b"))
+            assertEquals(1, content(awaitItem()).openCount)
+
+            listFlow.value = list(deletedAt = 5L)
+            assertEquals(WidgetModel.Unavailable, awaitItem())
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun aMissingListFlowGivesUnavailable() = runTest {
+        widgetModels(flowOf(null), flowOf(emptyList())).test {
+            assertEquals(WidgetModel.Unavailable, awaitItem())
+            awaitComplete()
+        }
     }
 
     @Test

@@ -1,5 +1,7 @@
 package space.abhijithkm.shoppinglist.widget
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import space.abhijithkm.shoppinglist.core.util.formatQuantityAndUnit
 import space.abhijithkm.shoppinglist.data.local.ShoppingItemEntity
 import space.abhijithkm.shoppinglist.data.local.ShoppingListEntity
@@ -40,6 +42,17 @@ fun buildWidgetModel(list: ShoppingListEntity?, items: List<ShoppingItemEntity>,
         rows = ordered.take(maxRows).map { WidgetRow(it.id, label(it), it.isBought) },
     )
 }
+
+/**
+ * The widget model of one list as a flow, so a widget that is already showing follows the data. Glance keeps a widget's
+ * composition alive for a while and only recomposes it on update, so the model must be read inside the composition from a
+ * flow, never computed once before it.
+ */
+fun widgetModels(
+    list: Flow<ShoppingListEntity?>,
+    items: Flow<List<ShoppingItemEntity>>,
+    maxRows: Int = 30,
+): Flow<WidgetModel> = combine(list, items) { l, i -> buildWidgetModel(l, i, maxRows) }
 
 private fun label(item: ShoppingItemEntity): String =
     listOfNotNull(formatQuantityAndUnit(item.quantity, item.unit), item.name).joinToString(" ")

@@ -4,7 +4,15 @@ import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.dp
+import androidx.datastore.preferences.core.Preferences
+import androidx.glance.currentState
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import androidx.compose.ui.unit.sp
 import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
@@ -51,18 +59,37 @@ class ShoppingListWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val entry = EntryPointAccessors.fromApplication(context.applicationContext, WidgetEntryPoint::class.java)
-        val listId = boundListId(context, id)
-        val model = withContext(Dispatchers.IO) {
-            if (listId == null) {
+        val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
+        // The first frame is ready before the composition starts, so the widget never flashes empty.
+        val firstListId = boundListId(context, id)
+        val firstModel = withContext(Dispatchers.IO) {
+            if (firstListId == null) {
                 WidgetModel.NotConfigured
             } else {
-                buildWidgetModel(entry.lists().getById(listId), entry.items().allOfList(listId))
+                buildWidgetModel(entry.lists().getById(firstListId), entry.items().allOfList(firstListId))
             }
         }
-        val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
-        provideContent { GlanceTheme { WidgetBody(context, model, appWidgetId) } }
+        provideContent {
+            // Everything that can change is read INSIDE the composition: Glance keeps it alive for a while after the first
+            // draw and update() only recomposes it, so a list chosen later, a tick or an edit would never show if the model
+            // was computed once out here (found on a real launcher: a widget that kept saying "tap to choose a list").
+            val listId = currentState<Preferences>()[LIST_ID_KEY]
+            val model by remember(listId) { modelFlow(entry, listId) }
+                .collectAsState(initial = if (listId == firstListId) firstModel else WidgetModel.NotConfigured)
+            GlanceTheme { WidgetBody(context, model, appWidgetId) }
+        }
     }
 }
+
+private fun modelFlow(entry: WidgetEntryPoint, listId: String?): Flow<WidgetModel> =
+    if (listId == null) {
+        flowOf(WidgetModel.NotConfigured)
+    } else {
+        widgetModels(
+            list = entry.lists().observeOneWithCounts(listId).map { it?.list },
+            items = entry.items().observeForList(listId).map { rows -> rows.map { it.item } },
+        )
+    }
 
 @Composable
 private fun WidgetBody(context: Context, model: WidgetModel, appWidgetId: Int) {
