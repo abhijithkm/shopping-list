@@ -66,9 +66,10 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
         notificationsOff = notificationsOff,
         onFixNotifications = { openNotificationSettings(context) },
         accountSection = { AccountSection() },
+        onNotifyInvitationsChange = viewModel::setNotifyInvitations,
+        onNotifySharedActivityChange = viewModel::setNotifySharedActivity,
     )
 }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreenContent(
@@ -82,6 +83,8 @@ fun SettingsScreenContent(
     onFixNotifications: () -> Unit = {},
     /** The Account block; a slot so this screen's tests need no Hilt. */
     accountSection: @Composable () -> Unit = {},
+    onNotifyInvitationsChange: (Boolean) -> Unit = {},
+    onNotifySharedActivityChange: (Boolean) -> Unit = {},
 ) {
     Scaffold(
         topBar = { TopAppBar(title = { Text(stringResource(R.string.nav_settings)) }) },
@@ -165,6 +168,18 @@ fun SettingsScreenContent(
                 summaryRes = R.string.settings_shopping_mode_summary,
                 checked = settings.shoppingModeEnabled,
                 onCheckedChange = onShoppingModeEnabledChange,
+            )
+            SwitchRow(
+                titleRes = R.string.settings_notify_invitations,
+                summaryRes = R.string.settings_notify_invitations_summary,
+                checked = settings.notifyInvitations,
+                onCheckedChange = onNotifyInvitationsChange,
+            )
+            SwitchRow(
+                titleRes = R.string.settings_notify_activity,
+                summaryRes = R.string.settings_notify_activity_summary,
+                checked = settings.notifySharedActivity,
+                onCheckedChange = onNotifySharedActivityChange,
             )
             HorizontalDivider()
             SectionTitle(R.string.settings_about)

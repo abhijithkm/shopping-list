@@ -30,6 +30,14 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { repository.setShowCompleted(show) }
     }
 
+    fun setNotifyInvitations(enabled: Boolean) {
+        viewModelScope.launch { repository.setNotifyInvitations(enabled) }
+    }
+
+    fun setNotifySharedActivity(enabled: Boolean) {
+        viewModelScope.launch { repository.setNotifySharedActivity(enabled) }
+    }
+
     // These switches live in DataStore, which the surface updater does not watch: redraw the notifications and alarms ourselves.
     fun setRemindersEnabled(enabled: Boolean) {
         viewModelScope.launch {

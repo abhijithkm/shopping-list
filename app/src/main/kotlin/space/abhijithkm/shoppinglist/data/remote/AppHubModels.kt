@@ -140,6 +140,17 @@ object FlexBooleanSerializer : KSerializer<Boolean> {
     override fun serialize(encoder: Encoder, value: Boolean) = encoder.encodeBoolean(value)
 }
 
+object FlexIntSerializer : KSerializer<Int> {
+    override val descriptor = PrimitiveSerialDescriptor("FlexInt", PrimitiveKind.INT)
+    override fun deserialize(decoder: Decoder): Int {
+        val element = (decoder as? JsonDecoder)?.decodeJsonElement() ?: return decoder.decodeInt()
+        val primitive = element as? JsonPrimitive ?: throw SerializationException("Expected a scalar, got $element")
+        return primitive.content.toIntOrNull() ?: primitive.doubleOrNull?.toInt() ?: throw SerializationException("Not a number: ${primitive.content}")
+    }
+
+    override fun serialize(encoder: Encoder, value: Int) = encoder.encodeInt(value)
+}
+
 object FlexDoubleSerializer : KSerializer<Double> {
     override val descriptor = PrimitiveSerialDescriptor("FlexDouble", PrimitiveKind.DOUBLE)
     override fun deserialize(decoder: Decoder): Double {
@@ -176,6 +187,8 @@ data class ListRow(
     @SerialName("created_at_ms") override val createdAtMs: Long = 0,
     @SerialName("deleted_at_ms") override val deletedAtMs: Long? = null,
     @SerialName("updated_at") override val updatedAt: String? = null,
+    /** The owner's AppHub id (the owner column). Differs from the signed-in user for a list shared with them. */
+    @SerialName("user_id") @Serializable(with = FlexStringSerializer::class) val userId: String? = null,
 ) : SyncedRow
 
 @Serializable
@@ -196,6 +209,12 @@ data class ItemRow(
     @SerialName("created_at_ms") override val createdAtMs: Long = 0,
     @SerialName("deleted_at_ms") override val deletedAtMs: Long? = null,
     @SerialName("updated_at") override val updatedAt: String? = null,
+    /** The creator's AppHub id (the owner column of the item). */
+    @SerialName("user_id") @Serializable(with = FlexStringSerializer::class) val userId: String? = null,
+    /** Who changed the row last (set by the server's trigger); null on a server without collaboration. */
+    @SerialName("updated_by") @Serializable(with = FlexStringSerializer::class) val updatedBy: String? = null,
+    /** The server's per-row edit counter, sent back as `base_revision` so a concurrent edit is detected; 0 = server has none. */
+    @Serializable(with = FlexIntSerializer::class) val revision: Int = 0,
 ) : SyncedRow
 
 @Serializable
@@ -225,6 +244,15 @@ object Tables {
     const val ITEMS = "shopping_items"
     const val CATEGORIES = "categories"
     const val TAGS = "tags"
+
+    // Collaboration (Phase 4, backend/apphub/collab-contract.md). Absent on a server that has not been provisioned for it.
+    const val MEMBERS = "list_members"
+    const val INVITATIONS = "list_invitations"
+    const val JOIN_REQUESTS = "join_requests"
+    const val USER_LOOKUPS = "user_lookups"
+    const val JOIN_CODES = "join_codes"
+    const val CODE_LOOKUPS = "code_lookups"
+    const val COMMANDS = "list_commands"
 }
 
 /** The one JSON configuration used for every request and every answer. */

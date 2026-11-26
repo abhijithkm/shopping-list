@@ -138,6 +138,7 @@ data class ListDetailActions(
 @Composable
 fun ListDetailScreen(
     onBack: () -> Unit,
+    onShare: (listId: String) -> Unit = {},
     viewModel: ListDetailViewModel = hiltViewModel(), // wired to Hilt; the content below is stateless
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -192,6 +193,7 @@ fun ListDetailScreen(
         },
         onOpenReminder = { reminderOpen = true },
         notice = notice,
+        onShare = { state.list?.id?.let(onShare) },
     )
     if (reminderOpen) ReminderSheet(onDismiss = { reminderOpen = false })
 }
@@ -202,6 +204,7 @@ fun ListDetailContent(
     state: ListDetailUiState,
     actions: ListDetailActions,
     onBack: () -> Unit = {},
+    onShare: () -> Unit = {},
     /** Whether this list's ongoing "Shopping mode" notification is switched on (a device-only setting). */
     shoppingMode: Boolean = false,
     onToggleShoppingMode: () -> Unit = {},
@@ -209,6 +212,8 @@ fun ListDetailContent(
     notice: ListDetailNotice? = null,
 ) {
     val list = state.list
+    // Only the owner changes the list itself; an editor works on its items.
+    val canManage = list?.canManage ?: true
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val resources = LocalResources.current
@@ -282,6 +287,13 @@ fun ListDetailContent(
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             DropdownMenuItem(
+                                text = { Text(stringResource(if (canManage) R.string.share_list else R.string.list_members_title)) },
+                                onClick = {
+                                    menuOpen = false
+                                    onShare()
+                                },
+                            )
+                            if (canManage) DropdownMenuItem(
                                 text = { Text(stringResource(R.string.edit_list)) },
                                 onClick = {
                                     menuOpen = false
@@ -345,15 +357,17 @@ fun ListDetailContent(
                                     onToggleShoppingMode()
                                 },
                             )
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.archive_list)) },
-                                onClick = {
-                                    menuOpen = false
-                                    actions.onArchiveList()
-                                    onBack()
-                                },
-                            )
+                            if (canManage) {
+                                HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.archive_list)) },
+                                    onClick = {
+                                        menuOpen = false
+                                        actions.onArchiveList()
+                                        onBack()
+                                    },
+                                )
+                            }
                         }
                     }
                 },

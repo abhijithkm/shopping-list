@@ -33,6 +33,8 @@ import space.abhijithkm.shoppinglist.feature.categories.CategoriesScreen
 import space.abhijithkm.shoppinglist.feature.listdetail.ListDetailScreen
 import space.abhijithkm.shoppinglist.feature.lists.ListsScreen
 import space.abhijithkm.shoppinglist.feature.settings.SettingsScreen
+import space.abhijithkm.shoppinglist.feature.sharing.InvitationsScreen
+import space.abhijithkm.shoppinglist.feature.sharing.ShareScreen
 import space.abhijithkm.shoppinglist.surfaces.OpenListOutcome
 import space.abhijithkm.shoppinglist.surfaces.OpenListRequest
 import space.abhijithkm.shoppinglist.surfaces.OpenListViewModel
@@ -41,8 +43,19 @@ const val ROUTE_LISTS = "lists"
 const val ROUTE_CATEGORIES = "categories"
 const val ROUTE_SETTINGS = "settings"
 const val ROUTE_LIST_DETAIL = "list/{listId}"
+const val ROUTE_SHARE = "share/{listId}"
+const val ROUTE_INVITATIONS = "invitations"
 
 fun listDetailRoute(listId: String) = "list/$listId"
+
+fun shareRoute(listId: String) = "share/$listId"
+
+/** Where a tapped notification wants the app to go. */
+sealed interface LaunchTarget {
+    data object Inbox : LaunchTarget
+
+    data class OpenList(val listId: String) : LaunchTarget
+}
 
 /** The bottom bar is only shown on these; the list detail screen uses the full height. */
 private val TOP_LEVEL_ROUTES = setOf(ROUTE_LISTS, ROUTE_CATEGORIES, ROUTE_SETTINGS)
@@ -76,7 +89,7 @@ private val topLevelDestinations = listOf(
  * opens on top of it, so Back goes to the Lists. A list that is gone leaves the Lists screen with a short message.
  */
 @Composable
-fun AppNavHost(openListRequest: OpenListRequest? = null) {
+fun AppNavHost(launchTarget: LaunchTarget? = null, onLaunchHandled: () -> Unit = {}, openListRequest: OpenListRequest? = null) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -94,6 +107,15 @@ fun AppNavHost(openListRequest: OpenListRequest? = null) {
             is OpenListOutcome.Show -> navController.navigate(listDetailRoute(outcome.listId))
             OpenListOutcome.Unavailable -> snackbarHostState.showSnackbar(listNotAvailable)
         }
+    }
+
+    LaunchedEffect(launchTarget) {
+        when (launchTarget) {
+            LaunchTarget.Inbox -> navController.navigate(ROUTE_INVITATIONS) { launchSingleTop = true }
+            is LaunchTarget.OpenList -> navController.navigate(listDetailRoute(launchTarget.listId)) { launchSingleTop = true }
+            null -> return@LaunchedEffect
+        }
+        onLaunchHandled()
     }
 
     Scaffold(
@@ -124,13 +146,34 @@ fun AppNavHost(openListRequest: OpenListRequest? = null) {
             modifier = Modifier.padding(innerPadding),
         ) {
             composable(ROUTE_LISTS) {
-                ListsScreen(onOpenList = { listId -> navController.navigate(listDetailRoute(listId)) })
+                ListsScreen(
+                    onOpenList = { listId -> navController.navigate(listDetailRoute(listId)) },
+                    onOpenInvitations = { navController.navigate(ROUTE_INVITATIONS) },
+                )
             }
             composable(
                 route = ROUTE_LIST_DETAIL,
                 arguments = listOf(navArgument("listId") { type = NavType.StringType }),
             ) {
-                ListDetailScreen(onBack = { navController.popBackStack() })
+                ListDetailScreen(
+                    onBack = { navController.popBackStack() },
+                    onShare = { listId -> navController.navigate(shareRoute(listId)) },
+                )
+            }
+            composable(
+                route = ROUTE_SHARE,
+                arguments = listOf(navArgument("listId") { type = NavType.StringType }),
+            ) {
+                ShareScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenSettings = { navController.navigate(ROUTE_SETTINGS) { launchSingleTop = true } },
+                )
+            }
+            composable(ROUTE_INVITATIONS) {
+                InvitationsScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenSettings = { navController.navigate(ROUTE_SETTINGS) { launchSingleTop = true } },
+                )
             }
             composable(ROUTE_CATEGORIES) { CategoriesScreen() }
             composable(ROUTE_SETTINGS) { SettingsScreen() }

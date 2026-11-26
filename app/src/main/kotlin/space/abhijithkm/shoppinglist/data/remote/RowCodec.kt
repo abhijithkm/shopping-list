@@ -10,6 +10,11 @@ object RowCodec {
     fun item(row: JsonObject): ItemRow = decode(row, ItemRow.serializer())
     fun category(row: JsonObject): CategoryRow = decode(row, CategoryRow.serializer())
     fun tag(row: JsonObject): TagRow = decode(row, TagRow.serializer())
+    fun member(row: JsonObject): MemberRow = decode(row, MemberRow.serializer())
+    fun invitation(row: JsonObject): InvitationRow = decode(row, InvitationRow.serializer())
+    fun joinRequest(row: JsonObject): JoinRequestRow = decode(row, JoinRequestRow.serializer())
+    fun userLookup(row: JsonObject): UserLookupRow = decode(row, UserLookupRow.serializer())
+    fun codeLookup(row: JsonObject): CodeLookupRow = decode(row, CodeLookupRow.serializer())
 
     private fun <T> decode(row: JsonObject, serializer: KSerializer<T>): T = try {
         AppHubJson.decodeFromJsonElement(serializer, row)

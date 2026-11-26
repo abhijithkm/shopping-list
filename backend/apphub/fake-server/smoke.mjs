@@ -126,7 +126,9 @@ async function mainScenario() {
     r = await c.get('/auth/access', { token: ann.token });
     const acc = r.json?.data;
     check('/auth/access: app, principal and auth_table', r.status === 200 && acc.app === 'shoppinglistdev' && acc.principal.role === 'user' && acc.principal.id === String(d.user.id) && acc.auth_table === 'users', r.text);
-    check('/auth/access: the four data tables allow list/read/create/update as own and no delete', ['shopping_lists', 'shopping_items', 'categories', 'tags'].every((t) => JSON.stringify(acc.tables[t].actions) === '{"list":"own","read":"own","create":"own","update":"own"}'), acc.tables);
+    // Phase 4 (collab-contract.md section 2): lists are read as `shared` (create and update stay own), items are read and updated as
+    // `shared` (create stays own); categories and tags are unchanged. Nobody has delete.
+    check('/auth/access: lists list/read are shared (create, update own), items list/read/update shared (create own), categories and tags own, no delete', JSON.stringify(acc.tables.shopping_lists.actions) === '{"list":"shared","read":"shared","create":"own","update":"own"}' && JSON.stringify(acc.tables.shopping_items.actions) === '{"list":"shared","read":"shared","create":"own","update":"shared"}' && ['categories', 'tags'].every((t) => JSON.stringify(acc.tables[t].actions) === '{"list":"own","read":"own","create":"own","update":"own"}'), acc.tables);
     check('/auth/access: users allows read and update only', JSON.stringify(acc.tables.users.actions) === '{"read":"own","update":"own"}' && JSON.stringify(acc.tables.users.update_fields) === '["display_name"]');
     check('/auth/access: create_fields has id, never user_id or updated_at; update_fields has no id', acc.tables.shopping_items.create_fields.includes('id') && !acc.tables.shopping_items.create_fields.includes('user_id') && !acc.tables.shopping_items.create_fields.includes('updated_at') && !acc.tables.shopping_items.update_fields.includes('id'));
     check('/auth/access: sortable has updated_at, created_at_ms; items filterable has list_id', acc.tables.shopping_items.sortable.includes('updated_at') && acc.tables.shopping_items.sortable.includes('created_at_ms') && acc.tables.shopping_items.filterable.includes('list_id') && acc.tables.shopping_lists.filterable.includes('id'));
@@ -162,7 +164,8 @@ async function mainScenario() {
     r = await c.get(`/shopping_items/${itemA.id.toUpperCase()}`, { token: ann.token });
     check('ids compare case-insensitively (utf8mb4_unicode_ci)', r.status === 200, r.status);
     r = await c.post('/shopping_items', item(uuid(), 'Orphan'), { token: ann.token });
-    check('item with an unknown list_id answers 409 (foreign key)', r.status === 409, r.text);
+    // Phase 4: the BEFORE INSERT trigger runs before the foreign key is looked at, so an unknown list is "not your list" (was 409).
+    check('item with an unknown list_id answers 422 sl:not_a_member (the trigger runs before the foreign key; Phase 3 answered 409)', r.status === 422 && message(r) === 'sl:not_a_member', r.text);
     const annDairy = { id: uuid(), builtin_key: 'dairy', name: 'Milk and eggs', color: -256, created_at_ms: NOW_MS };
     r = await c.post('/categories', annDairy, { token: ann.token });
     check('built-in override: a UUID id with builtin_key "dairy", rename and colour, is created', r.status === 201 && r.json.data.id === annDairy.id && r.json.data.builtin_key === 'dairy' && r.json.data.name === 'Milk and eggs' && r.json.data.color === -256, r.text);
@@ -283,7 +286,13 @@ async function mainScenario() {
     const itemBefore = r.json.data.updated_at;
     await sleep(6);
     r = await c.patch(`/shopping_items/${itemA.id}`, { quantity: 2.5, notes: 'semi-skimmed' }, { token: ann.token });
-    check('PATCH quantity 2.5 over "2.500" is a no-op (compared as DECIMAL)', r.status === 200 && r.json.data.updated_at === itemBefore, [itemBefore, r.json?.data?.updated_at]);
+    // Phase 4: the item trigger raises `revision` on EVERY update (collab-contract.md section 5), so on ITEMS even a PATCH that changes no
+    // value moves revision and therefore updated_at (Phase 3: unchanged). Quantity 2.5 is still compared as DECIMAL: nothing else changes.
+    check('PATCH quantity 2.5 over "2.500" changes no value, but on an item it still bumps revision (and so updated_at): Phase 4 trigger', r.status === 200 && r.json.data.quantity === '2.500' && r.json.data.revision === 2 && r.json.data.updated_at > itemBefore, [itemBefore, r.json?.data]);
+    const listNoopBefore = (await c.get(`/shopping_lists/${listA.id}`, { token: ann.token })).json.data.updated_at;
+    await sleep(6);
+    r = await c.patch(`/shopping_lists/${listA.id}`, { name: 'Weekly groceries', sort_key: 1024.0 }, { token: ann.token });
+    check('a PATCH that changes no value on a LIST still leaves updated_at alone (lists have no update trigger)', r.status === 200 && r.json.data.updated_at === listNoopBefore, [listNoopBefore, r.json?.data?.updated_at]);
     await sleep(6);
     r = await c.patch(`/shopping_items/${itemA.id}`, { is_bought: true, bought_at_ms: NOW_MS + 5 }, { token: ann.token });
     check('PATCH is_bought true stores 1 and bumps updated_at', r.status === 200 && r.json.data.is_bought === 1 && r.json.data.bought_at_ms === NOW_MS + 5 && r.json.data.updated_at > itemBefore, r.text);
@@ -313,9 +322,16 @@ async function mainScenario() {
     const editedBefore = r.json.data.updated_at;
     await sleep(6);
     r = await c.patch(`/shopping_items/${editedItem.id}`, { updated_at_ms: ms1 }, { token: ann.token });
-    check('PATCH updated_at_ms with the same value is a no-op (server updated_at unchanged)', r.status === 200 && r.json.data.updated_at === editedBefore, r.text);
+    check('PATCH updated_at_ms with the same value changes no value; on an ITEM the revision trigger still bumps revision and updated_at (Phase 4)', r.status === 200 && r.json.data.updated_at_ms === ms1 && r.json.data.revision === 2 && r.json.data.updated_at > editedBefore, r.text);
+    const editedListBefore = (await c.get(`/shopping_lists/${editedList.id}`, { token: ann.token })).json.data.updated_at;
+    await sleep(6);
+    r = await c.patch(`/shopping_lists/${editedList.id}`, { updated_at_ms: ms1 }, { token: ann.token });
+    check('PATCH updated_at_ms with the same value on a LIST is a no-op (server updated_at unchanged)', r.status === 200 && r.json.data.updated_at === editedListBefore, r.text);
+    r = await c.get(`/shopping_items/${editedItem.id}`, { token: ann.token });
+    const editedBefore2 = r.json.data.updated_at;
+    await sleep(6);
     r = await c.patch(`/shopping_items/${editedItem.id}`, { updated_at_ms: ms1 + 500 }, { token: ann.token });
-    check('PATCH updated_at_ms changes it (number) and moves the server updated_at', r.status === 200 && r.json.data.updated_at_ms === ms1 + 500 && r.json.data.updated_at > editedBefore, r.text);
+    check('PATCH updated_at_ms changes it (number) and moves the server updated_at', r.status === 200 && r.json.data.updated_at_ms === ms1 + 500 && r.json.data.updated_at > editedBefore2, r.text);
     r = await c.patch(`/shopping_lists/${editedList.id}`, { updated_at_ms: ms1 + 7 }, { token: ann.token });
     check('PATCH updated_at_ms on a list works', r.status === 200 && r.json.data.updated_at_ms === ms1 + 7, r.text);
     r = await c.patch(`/shopping_items/${editedItem.id}`, { updated_at_ms: null }, { token: ann.token });
@@ -436,9 +452,9 @@ async function mainScenario() {
     check('sort=created_at_ms is allowed on categories', r.status === 200 && r.json.data.length === 2, r.text);
     section('second user, continued');
     r = await c.post('/shopping_items', item(listA.id, "Bob's item in Ann's list"), { token: bob.token });
-    check('KNOWN LIMITATION (Phase 4 triggers): an item may reference another user\'s list_id (only a foreign key checks it)', r.status === 201 && r.json.data.user_id === bob.user.id, r.text);
+    check('FIXED IN PHASE 4 (was KNOWN LIMITATION: an item could reference another user\'s list_id): the item trigger answers 422 sl:not_a_member', r.status === 422 && message(r) === 'sl:not_a_member', r.text);
     r = await c.get(`/shopping_items?list_id=${listA.id}`, { token: ann.token });
-    check("...and the list owner does not see that item (owner column scoping)", r.status === 200 && r.json.data.every((x) => x.user_id === d.user.id), r.json);
+    check("...and the list owner's item list holds only their own items (the refused insert stored nothing)", r.status === 200 && r.json.data.every((x) => x.user_id === d.user.id), r.json);
     r = await c.get('/auth/me', { token: bob.token });
     check('/auth/me of the second user is the second user', r.json.data.email === 'bob@example.com');
     const dev1 = client(srv, 'shoppinglist');

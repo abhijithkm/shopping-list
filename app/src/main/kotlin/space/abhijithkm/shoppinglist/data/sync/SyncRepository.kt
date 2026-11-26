@@ -21,12 +21,19 @@ import space.abhijithkm.shoppinglist.data.session.AccountInfo
 import space.abhijithkm.shoppinglist.data.session.SessionManager
 import space.abhijithkm.shoppinglist.data.session.SessionState
 
-/** Account data becomes guest data: no account, no server revision, no sync bookkeeping. Nothing is deleted. */
+/**
+ * Account data becomes guest data: no account, no server revision, no sync bookkeeping. The account's own lists, items,
+ * categories and tags are never deleted. Lists that other people own and share with the account are not the account's
+ * data to keep: they leave the device with the account and come back at the next sign-in, as do the cached memberships,
+ * invitations and join requests.
+ */
 internal suspend fun detachAccountData(db: AppDatabase, accountId: String) {
     val sync = db.syncDao()
     // Bookkeeping first, while the rows still say whose they are.
     sync.deleteEntitiesOfAccount(accountId)
+    db.listDao().purgeSharedOf(accountId)
     db.listDao().detachAccount(accountId)
+    CollabStore(db).clear(accountId)
     db.categoryDao().detachAccount(accountId)
     db.tagDao().detachAccount(accountId)
     sync.clearState(accountId)
@@ -76,6 +83,8 @@ data class SyncStatus(
 data class SignOutReport(
     /** Changes that had not reached the server when the user signed out (kept on the device as guest data). */
     val unsyncedChanges: Int,
+    /** Edits to lists other people own that had not reached the server: they are not kept (those lists leave with the account). */
+    val lostSharedChanges: Int = 0,
 )
 
 /**
@@ -160,12 +169,13 @@ class SyncRepository @Inject constructor(
         val account = session.account?.userId
         if (account != null) withTimeoutOrNull(FINAL_SYNC_TIMEOUT_MS) { engine.run(SyncTrigger.MANUAL) }
         val unsynced = account?.let { sync.observeDirtyCount(it).first() } ?: 0
+        val lostShared = account?.let { sync.dirtySharedItemCount(it) } ?: 0
         // Both steps finish even if the caller goes away: a half sign-out would leave account data without a session.
         withContext(NonCancellable) {
             session.signOut()
             if (account != null) db.withTransaction { detachAccountData(db, account) }
         }
-        return SignOutReport(unsynced)
+        return SignOutReport(unsynced - lostShared, lostShared)
     }
 
     private class Summary(val conflicts: Int, val outcome: SyncOutcome?)

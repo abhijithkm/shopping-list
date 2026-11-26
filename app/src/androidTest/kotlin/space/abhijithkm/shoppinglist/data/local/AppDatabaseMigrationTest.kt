@@ -107,6 +107,31 @@ class AppDatabaseMigrationTest {
         }
     }
 
+    @Test
+    fun version3ToVersion4KeepsRemindersAndAddsEmptyCollaborationTables() {
+        helper.createDatabase(DB_NAME, 3).apply {
+            execSQL(
+                "INSERT INTO lists (id, accountId, origin, name, isArchived, isPinned, sortKey, role, createdAt, updatedAt, revision, serverRevision) " +
+                    "VALUES ('l1', NULL, 'LOCAL', 'Groceries', 0, 0, 5.0, 'OWNER', 10, 20, 1, 0)",
+            )
+            execSQL("INSERT INTO list_prefs (listId, shoppingMode) VALUES ('l1', 1)")
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(DB_NAME, 4, true)
+
+        db.query("SELECT shoppingMode FROM list_prefs WHERE listId = 'l1'").use {
+            assertTrue(it.moveToFirst())
+            assertEquals(1, it.getInt(0))
+        }
+        for (table in listOf("list_members", "invitations", "join_requests")) {
+            db.query("SELECT COUNT(*) FROM $table").use {
+                it.moveToFirst()
+                assertEquals(table, 0, it.getInt(0))
+            }
+        }
+    }
+
     private companion object {
         const val DB_NAME = "migration-test"
     }

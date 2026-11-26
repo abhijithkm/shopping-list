@@ -16,6 +16,10 @@ data class AppSettings(
     val showCompleted: Boolean = true,
     val listSort: ListSort = ListSort.RECENT,
     val groupByCategory: Boolean = false,
+    /** Local notification when someone invites the account, asks to join its list, or removes it from a list. */
+    val notifyInvitations: Boolean = true,
+    /** Local notification when other members change a shared list. */
+    val notifySharedActivity: Boolean = true,
     /** Master switch for timed reminders: off means no reminder notification, whatever each list has set. */
     val remindersEnabled: Boolean = true,
     /** Master switch for the ongoing "Shopping mode" notifications. */
@@ -46,8 +50,19 @@ data class ListSummary(
     val boughtCount: Int,
     val createdAt: Long = 0L,
     val updatedAt: Long,
+    /** Owner and editors this device knows of. More than one, or a list somebody else owns, means the list is shared. */
+    val memberCount: Int = 0,
+    /** Display name of the owner when the list belongs to someone else. */
+    val ownerName: String? = null,
+    /** True for a list that belongs to the signed-in account (it is, or will be, on the server); false for guest data. */
+    val isInAccount: Boolean = false,
 ) {
     val remainingCount: Int get() = totalCount - boughtCount
+
+    val isShared: Boolean get() = role == MemberRole.EDITOR || memberCount > 1
+
+    /** Only the owner may rename, archive, pin, recolour or delete the list; editors work on its items. */
+    val canManage: Boolean get() = role == MemberRole.OWNER
 }
 
 data class Tag(val id: String, val name: String)
@@ -79,6 +94,8 @@ data class Item(
     val boughtAt: Long?,
     val sortOrder: Double,
     val tags: List<Tag>,
+    /** AppHub id of the person who added the item (shared lists); null for guest data. */
+    val createdBy: String? = null,
 )
 
 /** Everything the edit sheet can change on an item. */

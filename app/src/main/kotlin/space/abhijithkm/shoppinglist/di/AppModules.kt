@@ -23,6 +23,7 @@ import space.abhijithkm.shoppinglist.data.local.ItemDao
 import space.abhijithkm.shoppinglist.data.local.ListPrefsDao
 import space.abhijithkm.shoppinglist.data.local.ReminderDao
 import space.abhijithkm.shoppinglist.data.local.ShoppingListDao
+import space.abhijithkm.shoppinglist.data.local.CollabDao
 import space.abhijithkm.shoppinglist.data.local.SyncDao
 import space.abhijithkm.shoppinglist.data.repository.AccountScope
 import space.abhijithkm.shoppinglist.data.repository.SessionAccountScope
@@ -31,6 +32,8 @@ import space.abhijithkm.shoppinglist.data.session.DataStoreSessionStorage
 import space.abhijithkm.shoppinglist.data.session.KeystoreKeyProvider
 import space.abhijithkm.shoppinglist.data.session.SecretCipher
 import space.abhijithkm.shoppinglist.data.session.SessionStorage
+import space.abhijithkm.shoppinglist.data.collab.CollabNotifier
+import space.abhijithkm.shoppinglist.data.sync.SyncObserver
 import space.abhijithkm.shoppinglist.data.sync.SyncScheduler
 import space.abhijithkm.shoppinglist.data.sync.WorkManagerSyncScheduler
 
@@ -52,6 +55,10 @@ abstract class AccountModule {
 
     @Binds
     abstract fun bindSyncScheduler(impl: WorkManagerSyncScheduler): SyncScheduler
+
+    /** Local notifications follow what each sync run found. */
+    @Binds
+    abstract fun bindSyncObserver(impl: CollabNotifier): SyncObserver
 }
 
 @Module
@@ -71,6 +78,9 @@ object DatabaseModule {
 
     @Provides
     fun provideSyncDao(db: AppDatabase): SyncDao = db.syncDao()
+
+    @Provides
+    fun provideCollabDao(db: AppDatabase): CollabDao = db.collabDao()
 
     @Provides
     fun provideReminderDao(db: AppDatabase): ReminderDao = db.reminderDao()

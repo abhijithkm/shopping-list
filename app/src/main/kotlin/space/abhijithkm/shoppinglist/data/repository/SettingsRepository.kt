@@ -41,6 +41,14 @@ class SettingsRepository @Inject constructor(
         dataStore.edit { it[GROUP_BY_CATEGORY] = group }
     }
 
+    suspend fun setNotifyInvitations(enabled: Boolean) {
+        dataStore.edit { it[NOTIFY_INVITATIONS] = enabled }
+    }
+
+    suspend fun setNotifySharedActivity(enabled: Boolean) {
+        dataStore.edit { it[NOTIFY_SHARED_ACTIVITY] = enabled }
+    }
+
     suspend fun setRemindersEnabled(enabled: Boolean) {
         dataStore.edit { it[REMINDERS_ENABLED] = enabled }
     }
@@ -56,11 +64,15 @@ class SettingsRepository @Inject constructor(
         listSort = this[LIST_SORT]?.let { stored -> ListSort.entries.firstOrNull { it.name == stored } }
             ?: ListSort.RECENT,
         groupByCategory = this[GROUP_BY_CATEGORY] ?: false,
+        notifyInvitations = this[NOTIFY_INVITATIONS] ?: true,
+        notifySharedActivity = this[NOTIFY_SHARED_ACTIVITY] ?: true,
         remindersEnabled = this[REMINDERS_ENABLED] ?: true,
         shoppingModeEnabled = this[SHOPPING_MODE_ENABLED] ?: true,
     )
 
     private companion object {
+        val NOTIFY_INVITATIONS = booleanPreferencesKey("notify_invitations")
+        val NOTIFY_SHARED_ACTIVITY = booleanPreferencesKey("notify_shared_activity")
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val SHOW_COMPLETED = booleanPreferencesKey("show_completed")
         val LIST_SORT = stringPreferencesKey("list_sort")

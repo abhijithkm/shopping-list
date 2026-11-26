@@ -22,6 +22,7 @@ import space.abhijithkm.shoppinglist.core.model.AppSettings
 import space.abhijithkm.shoppinglist.core.model.ListSort
 import space.abhijithkm.shoppinglist.core.model.ListSummary
 import space.abhijithkm.shoppinglist.core.model.MemberRole
+import space.abhijithkm.shoppinglist.data.collab.CollabState
 import space.abhijithkm.shoppinglist.data.repository.LocalShoppingRepository
 import space.abhijithkm.shoppinglist.data.repository.SettingsRepository
 
@@ -190,3 +191,8 @@ class ListsViewModelTest { // ViewModel logic with mocked repositories
         assertEquals(listOf("c", "b", "a"), sorted.map { it.id })
     }
 }
+
+/** The tests below build the view model from two mocks; the inbox badge is a third source with nothing in it. */
+@Suppress("FunctionName")
+private fun ListsViewModel(repository: LocalShoppingRepository, settings: SettingsRepository) =
+    ListsViewModel(repository, settings, mockk<CollabState> { every { inboxCount() } returns flowOf(0) })

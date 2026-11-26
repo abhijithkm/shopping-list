@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import space.abhijithkm.shoppinglist.core.model.ListSort
 import space.abhijithkm.shoppinglist.core.model.ListSummary
+import space.abhijithkm.shoppinglist.data.collab.CollabState
 import space.abhijithkm.shoppinglist.data.repository.LocalShoppingRepository
 import space.abhijithkm.shoppinglist.data.repository.SettingsRepository
 
@@ -26,12 +27,15 @@ data class ListsUiState(
     val query: String = "",
     val sort: ListSort = ListSort.RECENT,
     val showArchived: Boolean = false,
+    /** Invitations to the account plus join requests to its lists that wait for an answer. */
+    val inboxCount: Int = 0,
 )
 
 @HiltViewModel
 class ListsViewModel @Inject constructor(
     private val repository: LocalShoppingRepository,
     private val settings: SettingsRepository,
+    private val collabState: CollabState,
 ) : ViewModel() {
 
     private val query = MutableStateFlow("")
@@ -43,13 +47,15 @@ class ListsViewModel @Inject constructor(
         query,
         showArchived,
         settings.settings.map { it.listSort }.distinctUntilChanged(),
-    ) { lists, q, archived, sort ->
+        collabState.inboxCount().distinctUntilChanged(),
+    ) { lists, q, archived, sort, inbox ->
         ListsUiState(
             lists = lists.filteredAndSorted(q, sort),
             isLoading = false,
             query = q,
             sort = sort,
             showArchived = archived,
+            inboxCount = inbox,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ListsUiState())
 

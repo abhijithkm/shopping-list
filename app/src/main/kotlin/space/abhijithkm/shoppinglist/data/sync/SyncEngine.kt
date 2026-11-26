@@ -15,6 +15,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import space.abhijithkm.shoppinglist.core.util.Clock
 import space.abhijithkm.shoppinglist.data.local.AppDatabase
 import space.abhijithkm.shoppinglist.data.local.SyncEntityEntity
@@ -22,7 +23,10 @@ import space.abhijithkm.shoppinglist.data.local.SyncStateEntity
 import space.abhijithkm.shoppinglist.data.local.SyncType
 import space.abhijithkm.shoppinglist.data.remote.AppHubException
 import space.abhijithkm.shoppinglist.data.remote.AppHubTableApi
+import space.abhijithkm.shoppinglist.data.collab.isRevisionConflict
 import space.abhijithkm.shoppinglist.data.remote.Envelope
+import space.abhijithkm.shoppinglist.data.remote.RowCodec
+import space.abhijithkm.shoppinglist.data.remote.Tables
 import space.abhijithkm.shoppinglist.data.remote.appHubEnvelope
 import space.abhijithkm.shoppinglist.data.session.RefreshResult
 import space.abhijithkm.shoppinglist.data.session.SessionManager
@@ -51,6 +55,10 @@ data class SyncRunResult(
     val retryAfterMs: Long? = null,
     /** Rows left for later on purpose (a delete still inside its undo window). */
     val deferred: Int = 0,
+    /** Changes other members made to items of lists that were already on this device: list id to number of items. */
+    val sharedChanges: Map<String, Int> = emptyMap(),
+    /** Lists the account lost access to in this run (removed by the owner, or left); their local copy is gone. */
+    val removedFromLists: Int = 0,
 ) {
     /** Worth another attempt later without the user doing anything. */
     val shouldRetry: Boolean
@@ -63,6 +71,11 @@ private class AbortRun(val outcome: SyncOutcome, val retryAfterMs: Long? = null)
 
 /** A row was merged with the copy the server already had; its bookkeeping is done, a second push pass sends what is left. */
 private class Adopted : Exception(null, null, false, false)
+
+/** Told after every run that reached the server, so local notifications can follow what the sync found. */
+fun interface SyncObserver {
+    suspend fun onRunFinished(account: String, result: SyncRunResult)
+}
 
 /** Mutable state of one run. */
 private class Run(val account: String, val deadlineMs: Long) {
@@ -83,6 +96,13 @@ private class Run(val account: String, val deadlineMs: Long) {
     /** Ids of lists the server has deleted that this device never saw. */
     val deadParents = HashSet<String>()
 
+    /** Lists that arrived for the first time in this run: their items are not news from other members. */
+    val newLists = HashSet<String>()
+
+    /** Items other members changed, per list that was already here. */
+    val sharedChanges = HashMap<String, Int>()
+    var removedFromLists = 0
+
     /** The rows behind the current streak of server errors, so an outage does not leave them penalised. */
     val recentServerFailures = ArrayList<Triple<String, String, SyncEntityEntity?>>()
 }
@@ -101,14 +121,19 @@ class SyncEngine(
     private val clock: Clock,
     /** Minimum time between two requests; tests pass 0. */
     private val minRequestGapMs: Long,
+    /** Hears about every finished run (local notifications); tests that do not care pass nothing. */
+    private val observer: SyncObserver? = null,
 ) {
     @Inject
-    constructor(db: AppDatabase, tables: AppHubTableApi, session: SessionManager, clock: Clock) :
-        this(db, tables, session, clock, MIN_REQUEST_GAP_MS)
+    constructor(db: AppDatabase, tables: AppHubTableApi, session: SessionManager, clock: Clock, observer: SyncObserver) :
+        this(db, tables, session, clock, MIN_REQUEST_GAP_MS, observer)
 
     private val adapters: List<EntityAdapter> =
         listOf(TagAdapter(db, clock), CategoryAdapter(db, clock), ListAdapter(db, clock), ItemAdapter(db, clock))
+    private val adapterByType = adapters.associateBy { it.type }
+    private var collabUnavailableUntil = 0L
     private val sync = db.syncDao()
+    private val collabStore = CollabStore(db)
     private val mutex = Mutex()
     private var lastRequestAt = 0L
 
@@ -150,7 +175,13 @@ class SyncEngine(
             }
             val pull = trigger != SyncTrigger.LOCAL_CHANGE || pullIsDue(run)
             if (pull) {
-                adapters.forEach { pullType(run, it) }
+                // Memberships come before lists and items: a list the account may newly see is older than the cursors
+                // and has to be read in full, and a list the account lost has to go before its rows are looked at.
+                pullType(run, adapterByType.getValue(SyncType.TAG))
+                pullType(run, adapterByType.getValue(SyncType.CATEGORY))
+                val readEverything = pullCollab(run)
+                pullType(run, adapterByType.getValue(SyncType.LIST), ignoreCursor = readEverything)
+                pullType(run, adapterByType.getValue(SyncType.ITEM), ignoreCursor = readEverything)
                 putState(run.account, LAST_PULL_AT, clock.nowMillis().toString())
             }
             adapters.forEach { pushType(run, it) }
@@ -162,10 +193,24 @@ class SyncEngine(
             val now = clock.nowMillis()
             if (run.failed == 0 && run.pullErrors == 0) putState(run.account, LAST_SUCCESS_AT, now.toString())
             putState(run.account, LAST_RUN, summaryJson(now, SyncOutcome.COMPLETED, run))
-            SyncRunResult(SyncOutcome.COMPLETED, run.pushed, run.pulled, run.conflicts, run.failed, deferred = run.deferred)
+            SyncRunResult(
+                SyncOutcome.COMPLETED, run.pushed, run.pulled, run.conflicts, run.failed, deferred = run.deferred,
+                sharedChanges = run.sharedChanges, removedFromLists = run.removedFromLists,
+            ).also { notifyObserver(run.account, it) }
         } catch (e: AbortRun) {
             putState(run.account, LAST_RUN, summaryJson(clock.nowMillis(), e.outcome, run))
             SyncRunResult(e.outcome, run.pushed, run.pulled, run.conflicts, run.failed, e.retryAfterMs, run.deferred)
+        }
+    }
+
+    /** A failing notification must never fail a sync that already succeeded. */
+    private suspend fun notifyObserver(account: String, result: SyncRunResult) {
+        try {
+            observer?.onRunFinished(account, result)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.w("SyncEngine", "Observer failed", e)
         }
     }
 
@@ -181,11 +226,11 @@ class SyncEngine(
      * "changed since" filter in AppHub, but `updated_at` is maintained by the database on every real change and is
      * sortable, so the top of the stream is exactly the recent changes. Merging a row twice is harmless.
      */
-    private suspend fun pullType(run: Run, adapter: EntityAdapter) {
+    private suspend fun pullType(run: Run, adapter: EntityAdapter, ignoreCursor: Boolean = false) {
         val key = "cursor.${adapter.type}"
         // A new tag may be referenced by items that were stored without that link: read every item again this run.
         val storedCursor = sync.state(run.account, key)
-        val cursor = if (adapter.type == SyncType.ITEM && run.tagsInserted) null else storedCursor
+        val cursor = if (ignoreCursor || (adapter.type == SyncType.ITEM && run.tagsInserted)) null else storedCursor
         val threshold = cursor?.let { ServerTimestamp.minus(it, OVERLAP_MS) }
         var newest = cursor
         var skippedForParent = false
@@ -211,6 +256,8 @@ class SyncEngine(
                     }
                     result.ignoredId?.let { run.deadParents += it }
                     if (adapter.type == SyncType.TAG && result.outcome == ApplyOutcome.INSERTED) run.tagsInserted = true
+                    if (adapter.type == SyncType.LIST && result.outcome == ApplyOutcome.INSERTED) RowCodec.list(raw).id.let { run.newLists += it }
+                    result.foreignChangeListId?.let { if (it !in run.newLists) run.sharedChanges.merge(it, 1, Int::plus) }
                     when (result.outcome) {
                         ApplyOutcome.SKIPPED_PARENT_MISSING -> skippedForParent = true
                         ApplyOutcome.IGNORED -> Unit
@@ -231,6 +278,56 @@ class SyncEngine(
         }
         // Never move the cursor past a row that could not be placed yet (its list had not arrived): it is read again next time.
         if (!skippedForParent && newest != null && newest != storedCursor) putState(run.account, key, newest)
+    }
+
+    // ---------------------------------------------------------------------------------- collaboration
+
+    /**
+     * Reads the account's memberships, invitations and join requests (each a complete snapshot) and mirrors them locally.
+     * Returns true when lists and items must be read in full because the account may now see a list that is not here yet.
+     * A server that was not set up for sharing answers 404 for the first table: that is "no collaboration here", not an
+     * error, and it is not asked again for a few minutes.
+     */
+    private suspend fun pullCollab(run: Run): Boolean {
+        if (clock.nowMillis() < collabUnavailableUntil) return false
+        val members = readSnapshot(run, Tables.MEMBERS)
+        if (members == null) {
+            collabUnavailableUntil = clock.nowMillis() + COLLAB_RETRY_MS
+            return false
+        }
+        val applied = collabStore.applyMembers(run.account, members.map(RowCodec::member))
+        run.removedFromLists += applied.removedListIds.size
+        readSnapshot(run, Tables.INVITATIONS)?.let { collabStore.applyInvitations(run.account, it.map(RowCodec::invitation)) }
+        readSnapshot(run, Tables.JOIN_REQUESTS)?.let { collabStore.applyJoinRequests(run.account, it.map(RowCodec::joinRequest)) }
+        return applied.needsFullListPull
+    }
+
+    /**
+     * Every row of a table the account may see, or null when the table does not exist for this app (404/403) or cannot be
+     * read completely right now. A partial snapshot is never applied, because rows missing from it would be forgotten.
+     */
+    private suspend fun readSnapshot(run: Run, table: String): List<JsonObject>? {
+        val rows = ArrayList<JsonObject>()
+        var page = 1
+        try {
+            while (true) {
+                val envelope = call(run) { tables.list(table, page = page) }
+                val chunk = envelope.data.orEmpty()
+                rows += chunk
+                val pageCount = envelope.meta?.pages ?: 0
+                if (chunk.size < AppHubTableApi.PAGE_LIMIT || (pageCount in 1..page)) return rows
+                if (++page > MAX_SNAPSHOT_PAGES) return null
+            }
+        } catch (e: AppHubException.Http) {
+            if (e.status == 404 || e.status == 403) return null
+            runLevelAbort(e)?.let { throw it }
+            run.pullErrors++
+            return null
+        } catch (e: AppHubException) {
+            runLevelAbort(e)?.let { throw it }
+            run.pullErrors++
+            return null
+        }
     }
 
     // ------------------------------------------------------------------------------------- push
@@ -256,10 +353,17 @@ class SyncEngine(
         // An item can only be created once its list exists on the server.
         row.parentLocalId?.let { parent -> if (sync.entity(SyncType.LIST, parent)?.base == null) return }
         try {
-            val newBase = if (base == null) create(run, adapter, row) else patch(run, adapter, row, base)
+            val pushed = if (base == null) create(run, adapter, row) else patch(run, adapter, row, base, entity?.cloudRevision ?: 0)
             withContext(NonCancellable) {
                 db.withTransaction {
-                    sync.upsertEntity(SyncEntityEntity(adapter.type, row.localId, base = SyncFields.encode(newBase)))
+                    sync.upsertEntity(
+                        SyncEntityEntity(
+                            adapter.type,
+                            row.localId,
+                            base = SyncFields.encode(pushed.base),
+                            cloudRevision = pushed.cloudRevision ?: entity?.cloudRevision ?: 0,
+                        ),
+                    )
                     adapter.markClean(row.localId, row.revision)
                 }
             }
@@ -320,11 +424,12 @@ class SyncEngine(
     }
 
     /** POST with the client's UUID. A 409 means the row (or a retried create of it) already exists: adopt it and patch the differences. */
-    private suspend fun create(run: Run, adapter: EntityAdapter, row: DirtyRow): Fields {
+    private suspend fun create(run: Run, adapter: EntityAdapter, row: DirtyRow): Pushed {
         val cloudId = adapter.cloudId(run.account, row.localId)
         val body = SyncFields.body(row.fields, row.createExtras + updatedAtExtra(row))
+        val created: JsonObject?
         try {
-            call(run) { tables.create(adapter.table, body) }
+            created = call(run) { tables.create(adapter.table, body) }.data
             run.pushed++
         } catch (e: AppHubException.Http) {
             if (!e.isConflict) throw e
@@ -340,23 +445,44 @@ class SyncEngine(
             run.again = true
             throw Adopted()
         }
-        return row.fields
+        return Pushed(row.fields, revisionOf(created))
     }
 
-    private suspend fun patch(run: Run, adapter: EntityAdapter, row: DirtyRow, base: Fields): Fields {
+    private suspend fun patch(run: Run, adapter: EntityAdapter, row: DirtyRow, base: Fields, cloudRevision: Int): Pushed {
         val diff = row.fields.filter { (k, v) -> v != (base[k] ?: JsonNull) }
-        if (diff.isEmpty()) return base
+        if (diff.isEmpty()) return Pushed(base, null)
         val cloudId = adapter.cloudId(run.account, row.localId)
+        // An item carries the server's edit counter as it was when this device last saw the row. If another member
+        // changed it since, the server refuses (422 sl:conflict) instead of overwriting, and the row is merged below.
+        val guard = if (adapter.type == SyncType.ITEM && cloudRevision > 0) mapOf("base_revision" to JsonPrimitive(cloudRevision)) else emptyMap()
+        val patched: JsonObject?
         try {
-            call(run) { tables.patch(adapter.table, cloudId, SyncFields.body(diff, updatedAtExtra(row))) }
+            patched = call(run) { tables.patch(adapter.table, cloudId, SyncFields.body(diff, updatedAtExtra(row) + guard)) }.data
             run.pushed++
         } catch (e: AppHubException.Http) {
+            if (e.isRevisionConflict) adoptServerCopy(run, adapter, cloudId)
             if (!e.isNotFound) throw e
             // The row is gone from the server (wiped, or never persisted): create it again from the local copy.
             return create(run, adapter, row)
         }
-        return base + diff
+        return Pushed(base + diff, revisionOf(patched))
     }
+
+    /** Reads the row as the server has it now, merges it with the local edit, and lets a second push pass send what is left. */
+    private suspend fun adoptServerCopy(run: Run, adapter: EntityAdapter, cloudId: String): Nothing {
+        val current = call(run) { tables.get(adapter.table, cloudId) }.data ?: throw AppHubException.Protocol("The server sent an empty answer.")
+        val result = adapter.apply(run.account, current)
+        run.conflicts += result.conflicts
+        run.again = true
+        throw Adopted()
+    }
+
+    /** The server's edit counter in a create or PATCH answer; null when the server keeps none. */
+    private fun revisionOf(row: JsonObject?): Int? =
+        (row?.get("revision") as? JsonPrimitive)?.contentOrNull?.let { it.toIntOrNull() ?: it.toDoubleOrNull()?.toInt() }?.takeIf { it > 0 }
+
+    /** The result of a successful create or PATCH: the new common ancestor and the server's revision counter. */
+    private class Pushed(val base: Fields, val cloudRevision: Int?)
 
     private fun updatedAtExtra(row: DirtyRow): Map<String, JsonElement> =
         row.updatedAtMs?.let { mapOf("updated_at_ms" to JsonPrimitive(it)) } ?: emptyMap()
@@ -451,6 +577,8 @@ class SyncEngine(
         /** AppHub allows about 120 requests a minute per IP; stay just under it. */
         private const val MIN_REQUEST_GAP_MS = 520L
         private const val MAX_ATTEMPTS = 3
+        private const val COLLAB_RETRY_MS = 10 * 60_000L
+        private const val MAX_SNAPSHOT_PAGES = 20
         private const val MAX_CONSECUTIVE_SERVER_ERRORS = 3
         private const val MAX_ERROR_LENGTH = 200
         private const val DEFAULT_RETRY_AFTER_S = 60L
