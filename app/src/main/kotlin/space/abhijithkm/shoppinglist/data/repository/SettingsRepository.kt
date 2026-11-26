@@ -49,6 +49,14 @@ class SettingsRepository @Inject constructor(
         dataStore.edit { it[NOTIFY_SHARED_ACTIVITY] = enabled }
     }
 
+    suspend fun setRemindersEnabled(enabled: Boolean) {
+        dataStore.edit { it[REMINDERS_ENABLED] = enabled }
+    }
+
+    suspend fun setShoppingModeEnabled(enabled: Boolean) {
+        dataStore.edit { it[SHOPPING_MODE_ENABLED] = enabled }
+    }
+
     private fun Preferences.toSettings() = AppSettings(
         themeMode = this[THEME_MODE]?.let { stored -> ThemeMode.entries.firstOrNull { it.name == stored } }
             ?: ThemeMode.SYSTEM,
@@ -58,6 +66,8 @@ class SettingsRepository @Inject constructor(
         groupByCategory = this[GROUP_BY_CATEGORY] ?: false,
         notifyInvitations = this[NOTIFY_INVITATIONS] ?: true,
         notifySharedActivity = this[NOTIFY_SHARED_ACTIVITY] ?: true,
+        remindersEnabled = this[REMINDERS_ENABLED] ?: true,
+        shoppingModeEnabled = this[SHOPPING_MODE_ENABLED] ?: true,
     )
 
     private companion object {
@@ -67,5 +77,7 @@ class SettingsRepository @Inject constructor(
         val SHOW_COMPLETED = booleanPreferencesKey("show_completed")
         val LIST_SORT = stringPreferencesKey("list_sort")
         val GROUP_BY_CATEGORY = booleanPreferencesKey("group_by_category")
+        val REMINDERS_ENABLED = booleanPreferencesKey("reminders_enabled")
+        val SHOPPING_MODE_ENABLED = booleanPreferencesKey("shopping_mode_enabled")
     }
 }

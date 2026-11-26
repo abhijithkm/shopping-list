@@ -97,8 +97,22 @@ import space.abhijithkm.shoppinglist.core.model.ItemUpdate
 import space.abhijithkm.shoppinglist.core.model.Limits
 import space.abhijithkm.shoppinglist.core.util.formatQuantityAndUnit
 import space.abhijithkm.shoppinglist.feature.lists.ListEditDialog
+import androidx.compose.ui.platform.LocalContext
+import space.abhijithkm.shoppinglist.feature.reminders.ReminderSheet
+import space.abhijithkm.shoppinglist.feature.reminders.notificationsEnabled
+import space.abhijithkm.shoppinglist.feature.reminders.openNotificationSettings
+import space.abhijithkm.shoppinglist.feature.reminders.ReminderViewModel
+import space.abhijithkm.shoppinglist.feature.reminders.rememberNotificationPermissionRequester
 import space.abhijithkm.shoppinglist.ui.NoInsets
 import space.abhijithkm.shoppinglist.ui.components.displayName
+
+/** A one-off snackbar with an action; a new [id] makes the same message show again. */
+data class ListDetailNotice(
+    val id: Long,
+    val message: String,
+    val actionLabel: String,
+    val onAction: () -> Unit,
+)
 
 /** Everything the detail screen can ask for. Defaults are no-ops so tests only wire what they check. */
 data class ListDetailActions(
@@ -153,7 +167,35 @@ fun ListDetailScreen(
             onClearFilter = viewModel::clearFilter,
         )
     }
-    ListDetailContent(state = state, actions = actions, onBack = onBack, onShare = { state.list?.id?.let(onShare) })
+    // The per-list reminder and shopping-mode switches live in their own view model (local to the device, never synced).
+    val surfaces: ReminderViewModel = hiltViewModel()
+    val shoppingMode by surfaces.shoppingMode.collectAsStateWithLifecycle()
+    var reminderOpen by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    val notificationsOffMessage = stringResource(R.string.shopping_mode_notifications_off)
+    val openSettingsLabel = stringResource(R.string.reminder_open_settings)
+    var notice by remember { mutableStateOf<ListDetailNotice?>(null) }
+    val askNotificationPermission = rememberNotificationPermissionRequester {
+        // The permission changed, which no database write announces: redraw, and say so if shopping mode still cannot show.
+        surfaces.refreshSurfaces()
+        if (!notificationsEnabled(context)) {
+            notice = ListDetailNotice(System.nanoTime(), notificationsOffMessage, openSettingsLabel) { openNotificationSettings(context) }
+        }
+    }
+    ListDetailContent(
+        state = state,
+        actions = actions,
+        onBack = onBack,
+        shoppingMode = shoppingMode,
+        onToggleShoppingMode = {
+            surfaces.setShoppingMode(!shoppingMode)
+            if (!shoppingMode) askNotificationPermission() // asked in context: when shopping mode is switched on
+        },
+        onOpenReminder = { reminderOpen = true },
+        notice = notice,
+        onShare = { state.list?.id?.let(onShare) },
+    )
+    if (reminderOpen) ReminderSheet(onDismiss = { reminderOpen = false })
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -163,6 +205,11 @@ fun ListDetailContent(
     actions: ListDetailActions,
     onBack: () -> Unit = {},
     onShare: () -> Unit = {},
+    /** Whether this list's ongoing "Shopping mode" notification is switched on (a device-only setting). */
+    shoppingMode: Boolean = false,
+    onToggleShoppingMode: () -> Unit = {},
+    onOpenReminder: () -> Unit = {},
+    notice: ListDetailNotice? = null,
 ) {
     val list = state.list
     // Only the owner changes the list itself; an editor works on its items.
@@ -170,6 +217,11 @@ fun ListDetailContent(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val resources = LocalResources.current
+    LaunchedEffect(notice?.id) {
+        val shown = notice ?: return@LaunchedEffect
+        val result = snackbarHostState.showSnackbar(shown.message, shown.actionLabel, duration = SnackbarDuration.Long)
+        if (result == SnackbarResult.ActionPerformed) shown.onAction()
+    }
     val undoLabel = stringResource(R.string.undo)
     val itemDeletedMessage = stringResource(R.string.item_deleted)
 
@@ -283,6 +335,26 @@ fun ListDetailContent(
                                             showUndo(message) { actions.onRestoreItems(ids) }
                                         }
                                     }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.reminder_menu)) },
+                                onClick = {
+                                    menuOpen = false
+                                    onOpenReminder()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        stringResource(
+                                            if (shoppingMode) R.string.shopping_mode_turn_off else R.string.shopping_mode_turn_on,
+                                        ),
+                                    )
+                                },
+                                onClick = {
+                                    menuOpen = false
+                                    onToggleShoppingMode()
                                 },
                             )
                             if (canManage) {

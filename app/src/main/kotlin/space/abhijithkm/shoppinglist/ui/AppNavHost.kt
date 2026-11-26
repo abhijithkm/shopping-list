@@ -10,13 +10,17 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
@@ -31,6 +35,9 @@ import space.abhijithkm.shoppinglist.feature.lists.ListsScreen
 import space.abhijithkm.shoppinglist.feature.settings.SettingsScreen
 import space.abhijithkm.shoppinglist.feature.sharing.InvitationsScreen
 import space.abhijithkm.shoppinglist.feature.sharing.ShareScreen
+import space.abhijithkm.shoppinglist.surfaces.OpenListOutcome
+import space.abhijithkm.shoppinglist.surfaces.OpenListRequest
+import space.abhijithkm.shoppinglist.surfaces.OpenListViewModel
 
 const val ROUTE_LISTS = "lists"
 const val ROUTE_CATEGORIES = "categories"
@@ -77,11 +84,30 @@ private val topLevelDestinations = listOf(
     },
 )
 
+/**
+ * [openListRequest] comes from a widget, reminder or notification: the Lists screen is put underneath and the list
+ * opens on top of it, so Back goes to the Lists. A list that is gone leaves the Lists screen with a short message.
+ */
 @Composable
-fun AppNavHost(launchTarget: LaunchTarget? = null, onLaunchHandled: () -> Unit = {}) {
+fun AppNavHost(launchTarget: LaunchTarget? = null, onLaunchHandled: () -> Unit = {}, openListRequest: OpenListRequest? = null) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+    val openListViewModel: OpenListViewModel = hiltViewModel()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val listNotAvailable = stringResource(R.string.list_not_available)
+
+    LaunchedEffect(openListRequest) {
+        val request = openListRequest ?: return@LaunchedEffect
+        navController.navigate(ROUTE_LISTS) {
+            popUpTo(ROUTE_LISTS) { inclusive = false }
+            launchSingleTop = true
+        }
+        when (val outcome = openListViewModel.resolve(request.listId)) {
+            is OpenListOutcome.Show -> navController.navigate(listDetailRoute(outcome.listId))
+            OpenListOutcome.Unavailable -> snackbarHostState.showSnackbar(listNotAvailable)
+        }
+    }
 
     LaunchedEffect(launchTarget) {
         when (launchTarget) {
@@ -93,6 +119,7 @@ fun AppNavHost(launchTarget: LaunchTarget? = null, onLaunchHandled: () -> Unit =
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             if (currentRoute in TOP_LEVEL_ROUTES) NavigationBar {
                 topLevelDestinations.forEach { destination ->

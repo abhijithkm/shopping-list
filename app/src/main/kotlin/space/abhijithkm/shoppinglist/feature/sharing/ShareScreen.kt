@@ -315,13 +315,15 @@ private fun CodeSection(state: ShareUiState, actions: ShareActions, listName: St
     when (val code = state.code) {
         is CodeUi.Issued -> {
             val shown = JoinCode.display(code.code)
+            val shareMessage = stringResource(R.string.code_share_message, listName, shown)
+            val codeDescription = stringResource(R.string.code_content_description, code.code.toList().joinToString(" "))
             Text(
                 text = shown,
                 fontSize = 32.sp,
                 fontFamily = FontFamily.Monospace,
                 modifier = Modifier
                     .testTag("issued_code")
-                    .semantics { contentDescription = context.getString(R.string.code_content_description, code.code.toList().joinToString(" ")) },
+                    .semantics { contentDescription = codeDescription },
             )
             Text(stringResource(R.string.code_shown_now), style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -329,7 +331,7 @@ private fun CodeSection(state: ShareUiState, actions: ShareActions, listName: St
                     onClick = {
                         val send = Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, context.getString(R.string.code_share_message, listName, shown))
+                            putExtra(Intent.EXTRA_TEXT, shareMessage)
                         }
                         context.startActivity(Intent.createChooser(send, null))
                     },

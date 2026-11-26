@@ -24,7 +24,10 @@ All notable changes to this project are recorded here. Format based on [Keep a C
 - Docs: `APPHUB_INTEGRATION.md`, `SYNC_STRATEGY.md`; `DATABASE_SCHEMA.md` updated.
 - The cloud dev app `shoppinglistdev` (schema and config applied through the AppHub admin) and an opt-in on-device test, `CloudDevAppTest`, that runs the real client stack against a real AppHub app.
 
+- Phase 5: a Glance home-screen widget (one list per widget, tick items off, quick-add dialog, tap the title to open the list), per-list timed reminders (once, daily or weekly, optionally only when items are left; inexact alarms, restored after reboot, time-zone and clock change), a per-list ongoing "Shopping mode" notification with Open list and Mark all done, an open-a-list link, and two global switches in Settings. Room schema v3 (`reminders`, `list_prefs`, local only). Verified on an Android 16 emulator: 216 unit tests, 167 instrumented tests, and a hands-on pass with a real alarm, notification and launcher widget. Phase 4 (sharing) is parked on its own branch.
+
 ### Changed
+- Core library desugaring is enabled (`desugar_jdk_libs` 2.1.5) so `java.time` works on Android 7 and 7.1; `minSdk` stays 24.
 - Deleting a tag now also marks the items that carried it as edited, so the change syncs.
 - Account tombstones are purged only after the server acknowledged them; guest tombstones as before.
 - Debug builds talk to the local fake AppHub (`10.0.2.2:8787`); release builds to the cloud AppHub over HTTPS only. The app now declares the INTERNET and ACCESS_NETWORK_STATE permissions.

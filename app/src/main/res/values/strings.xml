@@ -1,6 +1,49 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">Shopping List</string>
+    <string name="list_not_available">That list is not available any more</string>
+    <string name="channel_reminders">Reminders</string>
+    <string name="channel_shopping_mode">Shopping mode</string>
+    <string name="shopping_mode_title">%1$s: %2$d of %3$d left</string>
+    <string name="shopping_mode_more">+%1$d more</string>
+    <string name="open_list">Open list</string>
+    <string name="mark_all_done">Mark all done</string>
+    <plurals name="reminder_items_left">
+        <item quantity="one">%d item left</item>
+        <item quantity="other">%d items left</item>
+    </plurals>
+    <string name="reminder_menu">Reminder</string>
+    <string name="shopping_mode_turn_on">Turn on shopping mode</string>
+    <string name="shopping_mode_turn_off">Turn off shopping mode</string>
+    <string name="reminder_title">Reminder</string>
+    <string name="reminder_repeat_once">Once</string>
+    <string name="reminder_repeat_daily">Daily</string>
+    <string name="reminder_repeat_weekly">Weekly</string>
+    <string name="reminder_date">Date</string>
+    <string name="reminder_time">Time</string>
+    <string name="reminder_only_if_items">Only if items are left</string>
+    <string name="reminder_turn_off">Turn off reminder</string>
+    <string name="reminder_notifications_off">Notifications are off, so this reminder will not show.</string>
+    <string name="reminder_open_settings">Open settings</string>
+    <string name="shopping_mode_notifications_off">Notifications are off, so the shopping-mode notification will not show.</string>
+    <string name="settings_notifications">Notifications</string>
+    <string name="settings_reminders">Reminders</string>
+    <string name="settings_reminders_summary">Timed reminders for your lists</string>
+    <string name="settings_shopping_mode">Shopping mode</string>
+    <string name="settings_shopping_mode_summary">An ongoing notification while you shop</string>
+    <string name="settings_notifications_off">Notifications are off for this app. Tap to open settings.</string>
+    <string name="widget_description">Check off and add items from one of your lists</string>
+    <string name="widget_not_available">This list is not available any more. Tap to choose another.</string>
+    <string name="widget_not_configured">Tap to choose a list</string>
+    <string name="widget_progress">%1$d of %2$d left</string>
+    <string name="widget_all_done">All done</string>
+    <string name="widget_no_items">No items yet</string>
+    <string name="widget_add">Add item</string>
+    <string name="widget_config_title">Choose a list</string>
+    <string name="widget_config_empty">Create a list in the app first, then add the widget again.</string>
+    <string name="quick_add_title">Add item</string>
+    <string name="quick_add_confirm">Add</string>
+    <string name="quick_add_cancel">Cancel</string>
 
     <string name="nav_lists">Lists</string>
     <string name="nav_categories">Categories</string>
@@ -337,13 +380,10 @@
     <string name="inv_done_request_sent">Request sent. The owner has to approve it.</string>
     <string name="inv_done_request_cancelled">Request cancelled.</string>
 
-    <string name="settings_notifications">Notifications</string>
     <string name="settings_notify_invitations">Invitations and requests</string>
     <string name="settings_notify_invitations_summary">Tell me when someone invites me, asks to join my list or removes me from one.</string>
     <string name="settings_notify_activity">Shared list changes</string>
     <string name="settings_notify_activity_summary">Tell me when other members change a shared list. Checked about every 30 minutes.</string>
-    <string name="settings_notifications_blocked">Notifications are turned off for this app, so these alerts cannot appear.</string>
-    <string name="settings_notifications_allow">Allow</string>
     <plurals name="account_signout_lost_shared">
         <item quantity="one">%d change to a shared list had not been sent and is discarded with the list.</item>
         <item quantity="other">%d changes to shared lists had not been sent and are discarded with the lists.</item>

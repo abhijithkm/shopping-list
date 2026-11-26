@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-11-16 (Phase 3 implemented, awaiting cloud verification). Each phase has its own completion report. A phase is complete only when its exit criteria are verified, not when it compiles.
+Last updated: 2026-11-25 (Phases 0 to 3 merged; Phase 5 implemented on `feature/phase-5-widgets-reminders`; Phase 4 parked; Phase 6 not started). Each phase has its own completion report. A phase is complete only when its exit criteria are verified, not when it compiles.
 
 ## Phase 0 — Repository and AppHub audit: complete
 
@@ -201,6 +201,75 @@ Everything in product requirements A to F works with no account and no network. 
 2. Say whether the server can send mail (password reset and email verification depend on it) and when to create the production app `shoppinglist` from the same files.
 3. Optionally try the app by hand against the dev app: a debug build with `-PSL_APPHUB_BASE_URL=https://132-226-190-156.sslip.io/apphub/` and a throwaway account of your own.
 
-## Phases 4 to 6
+## Phase 4 — Collaboration: parked (2026-11-25)
 
-Not started. Plan: [IMPLEMENTATION_PLAN](IMPLEMENTATION_PLAN.md). Phase 4 (collaboration) additionally needs the validation spike of [APPHUB_FEASIBILITY §9](APPHUB_FEASIBILITY.md) and an operator path for installing database triggers.
+Not part of version 1: the owner decided on 2026-11-25 that the first release is "just a simple app" without list sharing. The work is kept, not merged: the client and the server triggers are on `feature/phase-4-collaboration` (commits `997288d` and `845c337`, draft [PR 2](https://github.com/abhijithkm/shopping-list/pull/2)), written and reviewed but never run on a real MySQL (the triggers can only be installed over SSH by the owner). If it returns, its Room schema must be renumbered to v4 on top of Phase 5's v3.
+
+## Phase 5 — Widget, timed reminders and shopping mode: implemented, verified on one emulator (2026-11-25)
+
+**Status in one sentence:** a Glance home-screen widget, per-list timed reminders and a per-list ongoing "Shopping mode" notification are built, unit and device tested, and were run by hand on an Android 16 emulator (which found and fixed three defects); a physical device, Android 7 to 12 and a release build are **not** verified. Design: [the design doc](superpowers/specs/2026-11-25-phase-5-widgets-reminders-design.md); plan: [the plan](superpowers/plans/2026-11-25-phase-5-widgets-reminders.md).
+
+### Deliverables
+
+| Requirement | State | Where and evidence |
+|---|---|---|
+| Widget: one list per instance, chosen when it is added (and via Reconfigure) | Done | `widget/`; list chooser (`WidgetConfigActivity`), list id kept in Glance state; picker, Add and chooser verified on the emulator |
+| Widget: tick items off, no network | Done | `ToggleItemAction` calls the same `setItemBought` as the app; ticked on a real launcher widget: database row bought, revision bumped, widget redrawn at once |
+| Widget: quick-add | Done | `QuickAddActivity` (a dialog, Glance cannot host a text field) uses the app's quick-add parser; "2 kg rice" became name `rice`, quantity 2, unit `kg` |
+| Widget: open the list, unavailable list message | Done | header opens the list (`open_list` link); a deleted or archived list shows a message and a tap opens the chooser |
+| Widgets and notifications stay current, no periodic refresh | Done | one `SurfaceUpdater` listens to Room's own change tracking, 500 ms debounce, so any writer (app, widget, sync, notification button) is caught; `updatePeriodMillis = 0` |
+| Timed reminders per list: once, daily or weekly at a time, only if items are left | Done | `reminders/`; `ReminderMath` (DST gap and overlap tested), inexact `setAndAllowWhileIdle` alarms; fired on the emulator 44 s after its target, one-time reminder turned itself off |
+| Reminders survive reboot, time-zone change, clock change, app update | Done for reboot; others by unit test only | `RescheduleReceiver`; after a reboot the alarm was back about a minute later with the app never opened |
+| Shopping mode: ongoing silent notification, Open list and Mark all done | Done | `surfaces/`; seen in the shade (low-importance channel, two buttons); Mark all done bought every open item and cleared the notification |
+| Open a list from a widget, reminder or notification | Done | `open_list` extra; a real list opened, an unknown id showed "That list is not available any more" |
+| Notification permission asked in context, denied state shown | Done (UI tested); the system dialog not driven | asked when a reminder is saved or shopping mode is switched on; a denial keeps the reminder and explains; Settings offers the system settings |
+| Two global switches in Settings | Done | Reminders and Shopping mode, default on |
+| Room v3 (`reminders`, `list_prefs`), local only, never synced | Done | auto-migration 2 to 3 tested with data; [DATABASE_SCHEMA](DATABASE_SCHEMA.md) |
+
+### Verification (2026-11-25)
+
+| Check | Result |
+|---|---|
+| `gradlew testDebugUnitTest` | **Pass, 216 of 216** (Phase 3: 140, new: 76) |
+| `gradlew connectedDebugAndroidTest` (Android 16 emulator, whole suite) | **Pass, 167 tests, 0 failures, 3 skipped** (the opt-in cloud tests); run before the last widget commit, which changed no instrumented test |
+| `gradlew lintDebug` | **Pass**, 0 errors (it caught a real Android 7 crash, below) |
+| Hands-on pass on an Android 16 emulator, real database, real alarm, real launcher | Shopping-mode notification, reminder alarm and its notification, Mark all done, open-list link (real and unknown list), widget picker, Add, chooser, tick, quick-add, alarm restored after a reboot |
+
+### Defects found by verification, and fixed
+
+* **Reminders would have crashed on Android 7 and 7.1** (lint, 14 errors): the app supports API 24 but `java.time` needs API 26. Core library desugaring (`desugar_jdk_libs` 2.1.5) is on, `minSdk` stays 24. The defect had shipped in the commit before the fix, caught by lint, not by any test (tests run on newer Java and Android).
+* **The widget never showed a chosen list** (hands-on, real launcher): the content was computed once before the Glance composition, which stays alive and is only recomposed on update. The list id (`currentState`) and the data (Room flows) are now read inside the composition; a unit test of the new `widgetModels` flow failed first. Re-checked on the emulator: content shows, a tick redraws at once.
+* **`SurfaceNotifierTest` failed 2 of 6 in the full run** (a test race: posting and cancelling notifications is asynchronous): the tests now wait for the expected count. The app's behaviour is unchanged.
+* Smaller: a duplicate string name (`quick_add_hint`) and a non-observable locale in the reminder sheet (lint), both fixed.
+
+### Deviations and decisions
+
+* **Inexact alarms only** (decision D6 of the architecture proposal, over the hand-off's "exact alarm handling"): a reminder may fire a few minutes late; no exact-alarm permission, which Play restricts.
+* **Sharing is not in version 1**, so there is one reminders channel and one shopping-mode channel and no invitation notifications.
+* **`InvalidationTracker` instead of a "changed" signal from every write path** (sync and migration write through the DAOs, so a per-repository signal would miss them).
+* Test seams where Hilt cannot be used in tests (`ChangeSource`, `AlarmGateway`, `NotificationPrefs`, `ZoneProvider`); there is no Hilt test setup, so the widget's wiring was verified by hand on the emulator, not by automated tests.
+* One `ReminderViewModel` serves both the reminder and the shopping-mode switch of a list.
+
+### What is NOT verified
+
+* **A physical device** and any Android version other than 16: Android 7 to 12 are covered by lint only (the desugaring is untested at run time), and the Doze and OEM battery restrictions that delay inexact alarms (the emulator showed a 44 s delay).
+* **A release (R8) build** with Glance, Hilt receivers and the new code; Phase 6.
+* A time-zone change and a clock change with a real alarm (only the unit tests of `ReminderMath` and the scheduler); the real system permission dialog and a denied permission on a device (the sheet's denied state is UI tested); swiping the shopping-mode notification away on Android 14 and its return on the next change; two widgets showing different lists at once; resizing the widget; other launchers; TalkBack; the reminder sheet's date and time pickers by hand.
+* Battery cost of the alarms and of the change listener over days.
+
+### Known limitations
+
+* Reminders and shopping mode are set per device: they are not synced, and not shared.
+* On Android 14 and later the shopping-mode notification can be swiped away; it returns at the next data change (turn the switch off to stop that). There is no foreground service on purpose.
+* The widget shows at most 30 rows. There is no snooze and no location reminder.
+* Cosmetic: the quick-add dialog floats over the app's Lists screen, not the home screen; the widget list chooser sits close under the status bar.
+
+### Left for the owner
+
+1. Run the Phase 3 items under "Left for the owner" above (the `users.status` fix and the throwaway accounts on `shoppinglistdev`) and create the production app `shoppinglist` (the Phase 3 tables are enough for version 1; no triggers).
+2. Try the app on a physical phone, including a reboot and the reminder times you really use.
+3. Decide whether sharing (Phase 4) comes back and when; it needs the triggers installed over SSH with your MySQL admin login.
+
+## Phase 6
+
+Not started: QA and accessibility pass, a release (R8) build, the privacy policy and account-deletion text, the Play data-safety notes, and the signed AAB. Plan: [IMPLEMENTATION_PLAN](IMPLEMENTATION_PLAN.md).

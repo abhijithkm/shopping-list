@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 3,
-    "identityHash": "4d49778ffe1152062e6fbd549dc4a36c",
+    "identityHash": "8e4049affc6cc414f8d51fa2bc4efbf6",
     "entities": [
       {
         "tableName": "lists",
@@ -487,7 +487,7 @@
       },
       {
         "tableName": "sync_entities",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`type` TEXT NOT NULL, `id` TEXT NOT NULL, `base` TEXT, `failCount` INTEGER NOT NULL, `nextAttemptAt` INTEGER NOT NULL, `lastError` TEXT, `blocked` INTEGER NOT NULL, `blockedAtRevision` INTEGER NOT NULL, `cloudRevision` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`type`, `id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`type` TEXT NOT NULL, `id` TEXT NOT NULL, `base` TEXT, `failCount` INTEGER NOT NULL, `nextAttemptAt` INTEGER NOT NULL, `lastError` TEXT, `blocked` INTEGER NOT NULL, `blockedAtRevision` INTEGER NOT NULL, PRIMARY KEY(`type`, `id`))",
         "fields": [
           {
             "fieldPath": "type",
@@ -534,13 +534,6 @@
             "columnName": "blockedAtRevision",
             "affinity": "INTEGER",
             "notNull": true
-          },
-          {
-            "fieldPath": "cloudRevision",
-            "columnName": "cloudRevision",
-            "affinity": "INTEGER",
-            "notNull": true,
-            "defaultValue": "0"
           }
         ],
         "primaryKey": {
@@ -583,21 +576,9 @@
         }
       },
       {
-        "tableName": "list_members",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `accountId` TEXT NOT NULL, `listId` TEXT NOT NULL, `memberId` TEXT NOT NULL, `role` TEXT NOT NULL, `removal` TEXT, `displayName` TEXT, `createdAt` INTEGER NOT NULL, `notified` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "tableName": "reminders",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`listId` TEXT NOT NULL, `enabled` INTEGER NOT NULL, `repeat` TEXT NOT NULL, `hour` INTEGER NOT NULL, `minute` INTEGER NOT NULL, `daysOfWeekMask` INTEGER NOT NULL, `oneTimeAtMillis` INTEGER, `onlyIfItemsRemain` INTEGER NOT NULL, `lastFiredAt` INTEGER, PRIMARY KEY(`listId`), FOREIGN KEY(`listId`) REFERENCES `lists`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
-          {
-            "fieldPath": "id",
-            "columnName": "id",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "accountId",
-            "columnName": "accountId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
           {
             "fieldPath": "listId",
             "columnName": "listId",
@@ -605,167 +586,76 @@
             "notNull": true
           },
           {
-            "fieldPath": "memberId",
-            "columnName": "memberId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "role",
-            "columnName": "role",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "removal",
-            "columnName": "removal",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "displayName",
-            "columnName": "displayName",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "createdAt",
-            "columnName": "createdAt",
+            "fieldPath": "enabled",
+            "columnName": "enabled",
             "affinity": "INTEGER",
             "notNull": true
           },
           {
-            "fieldPath": "notified",
-            "columnName": "notified",
+            "fieldPath": "repeat",
+            "columnName": "repeat",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hour",
+            "columnName": "hour",
             "affinity": "INTEGER",
             "notNull": true
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": false,
-          "columnNames": [
-            "id"
-          ]
-        },
-        "indices": [
+          },
           {
-            "name": "index_list_members_accountId_listId",
-            "unique": false,
-            "columnNames": [
-              "accountId",
-              "listId"
-            ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_list_members_accountId_listId` ON `${TABLE_NAME}` (`accountId`, `listId`)"
-          }
-        ]
-      },
-      {
-        "tableName": "invitations",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `accountId` TEXT NOT NULL, `listId` TEXT NOT NULL, `listName` TEXT, `inviterId` TEXT NOT NULL, `inviterName` TEXT, `inviteeId` TEXT NOT NULL, `inviteeHint` TEXT, `status` TEXT NOT NULL, `expiresAt` INTEGER, `createdAt` INTEGER NOT NULL, `notified` INTEGER NOT NULL, PRIMARY KEY(`id`))",
-        "fields": [
-          {
-            "fieldPath": "id",
-            "columnName": "id",
-            "affinity": "TEXT",
+            "fieldPath": "minute",
+            "columnName": "minute",
+            "affinity": "INTEGER",
             "notNull": true
           },
           {
-            "fieldPath": "accountId",
-            "columnName": "accountId",
-            "affinity": "TEXT",
+            "fieldPath": "daysOfWeekMask",
+            "columnName": "daysOfWeekMask",
+            "affinity": "INTEGER",
             "notNull": true
           },
           {
-            "fieldPath": "listId",
-            "columnName": "listId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "listName",
-            "columnName": "listName",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "inviterId",
-            "columnName": "inviterId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "inviterName",
-            "columnName": "inviterName",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "inviteeId",
-            "columnName": "inviteeId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "inviteeHint",
-            "columnName": "inviteeHint",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "status",
-            "columnName": "status",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "expiresAt",
-            "columnName": "expiresAt",
+            "fieldPath": "oneTimeAtMillis",
+            "columnName": "oneTimeAtMillis",
             "affinity": "INTEGER"
           },
           {
-            "fieldPath": "createdAt",
-            "columnName": "createdAt",
+            "fieldPath": "onlyIfItemsRemain",
+            "columnName": "onlyIfItemsRemain",
             "affinity": "INTEGER",
             "notNull": true
           },
           {
-            "fieldPath": "notified",
-            "columnName": "notified",
-            "affinity": "INTEGER",
-            "notNull": true
+            "fieldPath": "lastFiredAt",
+            "columnName": "lastFiredAt",
+            "affinity": "INTEGER"
           }
         ],
         "primaryKey": {
           "autoGenerate": false,
           "columnNames": [
-            "id"
+            "listId"
           ]
         },
-        "indices": [
+        "foreignKeys": [
           {
-            "name": "index_invitations_accountId_status",
-            "unique": false,
-            "columnNames": [
-              "accountId",
-              "status"
+            "table": "lists",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "listId"
             ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_invitations_accountId_status` ON `${TABLE_NAME}` (`accountId`, `status`)"
+            "referencedColumns": [
+              "id"
+            ]
           }
         ]
       },
       {
-        "tableName": "join_requests",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `accountId` TEXT NOT NULL, `listId` TEXT NOT NULL, `listName` TEXT, `requesterId` TEXT NOT NULL, `requesterName` TEXT, `ownerId` TEXT NOT NULL, `status` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `notified` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "tableName": "list_prefs",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`listId` TEXT NOT NULL, `shoppingMode` INTEGER NOT NULL, PRIMARY KEY(`listId`), FOREIGN KEY(`listId`) REFERENCES `lists`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
-          {
-            "fieldPath": "id",
-            "columnName": "id",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "accountId",
-            "columnName": "accountId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
           {
             "fieldPath": "listId",
             "columnName": "listId",
@@ -773,42 +663,8 @@
             "notNull": true
           },
           {
-            "fieldPath": "listName",
-            "columnName": "listName",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "requesterId",
-            "columnName": "requesterId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "requesterName",
-            "columnName": "requesterName",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "ownerId",
-            "columnName": "ownerId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "status",
-            "columnName": "status",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "createdAt",
-            "columnName": "createdAt",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "notified",
-            "columnName": "notified",
+            "fieldPath": "shoppingMode",
+            "columnName": "shoppingMode",
             "affinity": "INTEGER",
             "notNull": true
           }
@@ -816,26 +672,27 @@
         "primaryKey": {
           "autoGenerate": false,
           "columnNames": [
-            "id"
+            "listId"
           ]
         },
-        "indices": [
+        "foreignKeys": [
           {
-            "name": "index_join_requests_accountId_status",
-            "unique": false,
-            "columnNames": [
-              "accountId",
-              "status"
+            "table": "lists",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "listId"
             ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_join_requests_accountId_status` ON `${TABLE_NAME}` (`accountId`, `status`)"
+            "referencedColumns": [
+              "id"
+            ]
           }
         ]
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '4d49778ffe1152062e6fbd549dc4a36c')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8e4049affc6cc414f8d51fa2bc4efbf6')"
     ]
   }
 }

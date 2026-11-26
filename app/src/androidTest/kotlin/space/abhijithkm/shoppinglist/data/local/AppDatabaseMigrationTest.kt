@@ -73,6 +73,65 @@ class AppDatabaseMigrationTest {
         }
     }
 
+    @Test
+    fun version2ToVersion3KeepsListsAndItemsAndAddsEmptyReminderTables() {
+        helper.createDatabase(DB_NAME, 2).apply {
+            execSQL(
+                "INSERT INTO lists (id, accountId, origin, name, isArchived, isPinned, sortKey, role, createdAt, updatedAt, revision, serverRevision) " +
+                    "VALUES ('l1', NULL, 'LOCAL', 'Groceries', 0, 0, 5.0, 'OWNER', 10, 20, 1, 0)",
+            )
+            execSQL(
+                "INSERT INTO items (id, listId, name, isBought, sortOrder, createdAt, updatedAt, revision, serverRevision) " +
+                    "VALUES ('i1', 'l1', 'Milk', 0, 1024.0, 11, 21, 1, 0)",
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(DB_NAME, 3, true)
+
+        db.query("SELECT name FROM lists WHERE id = 'l1'").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("Groceries", it.getString(0))
+        }
+        db.query("SELECT name FROM items WHERE id = 'i1'").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("Milk", it.getString(0))
+        }
+        db.query("SELECT COUNT(*) FROM reminders").use {
+            it.moveToFirst()
+            assertEquals(0, it.getInt(0))
+        }
+        db.query("SELECT COUNT(*) FROM list_prefs").use {
+            it.moveToFirst()
+            assertEquals(0, it.getInt(0))
+        }
+    }
+
+    @Test
+    fun version3ToVersion4KeepsRemindersAndAddsEmptyCollaborationTables() {
+        helper.createDatabase(DB_NAME, 3).apply {
+            execSQL(
+                "INSERT INTO lists (id, accountId, origin, name, isArchived, isPinned, sortKey, role, createdAt, updatedAt, revision, serverRevision) " +
+                    "VALUES ('l1', NULL, 'LOCAL', 'Groceries', 0, 0, 5.0, 'OWNER', 10, 20, 1, 0)",
+            )
+            execSQL("INSERT INTO list_prefs (listId, shoppingMode) VALUES ('l1', 1)")
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(DB_NAME, 4, true)
+
+        db.query("SELECT shoppingMode FROM list_prefs WHERE listId = 'l1'").use {
+            assertTrue(it.moveToFirst())
+            assertEquals(1, it.getInt(0))
+        }
+        for (table in listOf("list_members", "invitations", "join_requests")) {
+            db.query("SELECT COUNT(*) FROM $table").use {
+                it.moveToFirst()
+                assertEquals(table, 0, it.getInt(0))
+            }
+        }
+    }
+
     private companion object {
         const val DB_NAME = "migration-test"
     }

@@ -1,24 +1,6 @@
 package space.abhijithkm.shoppinglist.feature.settings
 
-import android.Manifest
-import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
-import android.provider.Settings
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LifecycleEventEffect
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -51,59 +33,56 @@ import space.abhijithkm.shoppinglist.BuildConfig
 import space.abhijithkm.shoppinglist.R
 import space.abhijithkm.shoppinglist.core.model.AppSettings
 import space.abhijithkm.shoppinglist.core.model.ThemeMode
+import androidx.compose.foundation.clickable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import space.abhijithkm.shoppinglist.feature.account.AccountSection
+import space.abhijithkm.shoppinglist.feature.reminders.notificationsEnabled
+import space.abhijithkm.shoppinglist.feature.reminders.openNotificationSettings
 import space.abhijithkm.shoppinglist.ui.NoInsets
 
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    var allowed by remember { mutableStateOf(notificationsAllowed(context)) }
-    // The person may change this in system settings and come back.
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { allowed = notificationsAllowed(context) }
-    var asked by rememberSaveable { mutableStateOf(false) }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed = notificationsAllowed(context) }
+    var notificationsOff by remember { mutableStateOf(!notificationsEnabled(context)) }
+    // The owner may fix it in the system settings and come back: look again every time the screen is resumed.
+    LifecycleResumeEffect(Unit) {
+        val off = !notificationsEnabled(context)
+        // Back from the system settings with notifications switched on again: show what was waiting.
+        if (notificationsOff && !off) viewModel.refreshSurfaces()
+        notificationsOff = off
+        onPauseOrDispose { }
+    }
     SettingsScreenContent(
         settings = settings,
         onThemeModeChange = viewModel::setThemeMode,
         onShowCompletedChange = viewModel::setShowCompleted,
+        onRemindersEnabledChange = viewModel::setRemindersEnabled,
+        onShoppingModeEnabledChange = viewModel::setShoppingModeEnabled,
+        notificationsOff = notificationsOff,
+        onFixNotifications = { openNotificationSettings(context) },
         accountSection = { AccountSection() },
-        notificationsAllowed = allowed,
-        onAllowNotifications = {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !asked) {
-                asked = true
-                launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            } else {
-                // Already asked (or the system never asks): the only way left is the notification settings of the app.
-                context.startActivity(
-                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
-                )
-            }
-        },
         onNotifyInvitationsChange = viewModel::setNotifyInvitations,
         onNotifySharedActivityChange = viewModel::setNotifySharedActivity,
     )
 }
-
-private fun notificationsAllowed(context: Context): Boolean {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-    ) {
-        return false
-    }
-    return NotificationManagerCompat.from(context).areNotificationsEnabled()
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreenContent(
     settings: AppSettings,
     onThemeModeChange: (ThemeMode) -> Unit,
     onShowCompletedChange: (Boolean) -> Unit,
+    onRemindersEnabledChange: (Boolean) -> Unit = {},
+    onShoppingModeEnabledChange: (Boolean) -> Unit = {},
+    /** True when this app may not post notifications; the screen then explains and offers the system settings. */
+    notificationsOff: Boolean = false,
+    onFixNotifications: () -> Unit = {},
     /** The Account block; a slot so this screen's tests need no Hilt. */
     accountSection: @Composable () -> Unit = {},
-    notificationsAllowed: Boolean = true,
-    onAllowNotifications: () -> Unit = {},
     onNotifyInvitationsChange: (Boolean) -> Unit = {},
     onNotifySharedActivityChange: (Boolean) -> Unit = {},
 ) {
@@ -166,25 +145,41 @@ fun SettingsScreenContent(
             }
             HorizontalDivider()
             SectionTitle(R.string.settings_notifications)
-            if (!notificationsAllowed) {
+            if (notificationsOff) {
                 Text(
-                    text = stringResource(R.string.settings_notifications_blocked),
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = stringResource(R.string.settings_notifications_off),
                     color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .clickable(onClick = onFixNotifications)
+                        .padding(vertical = 12.dp),
                 )
-                OutlinedButton(onClick = onAllowNotifications) { Text(stringResource(R.string.settings_notifications_allow)) }
             }
             SwitchRow(
-                title = R.string.settings_notify_invitations,
-                summary = R.string.settings_notify_invitations_summary,
-                checked = settings.notifyInvitations,
-                onChange = onNotifyInvitationsChange,
+                titleRes = R.string.settings_reminders,
+                summaryRes = R.string.settings_reminders_summary,
+                checked = settings.remindersEnabled,
+                onCheckedChange = onRemindersEnabledChange,
             )
             SwitchRow(
-                title = R.string.settings_notify_activity,
-                summary = R.string.settings_notify_activity_summary,
+                titleRes = R.string.settings_shopping_mode,
+                summaryRes = R.string.settings_shopping_mode_summary,
+                checked = settings.shoppingModeEnabled,
+                onCheckedChange = onShoppingModeEnabledChange,
+            )
+            SwitchRow(
+                titleRes = R.string.settings_notify_invitations,
+                summaryRes = R.string.settings_notify_invitations_summary,
+                checked = settings.notifyInvitations,
+                onCheckedChange = onNotifyInvitationsChange,
+            )
+            SwitchRow(
+                titleRes = R.string.settings_notify_activity,
+                summaryRes = R.string.settings_notify_activity_summary,
                 checked = settings.notifySharedActivity,
-                onChange = onNotifySharedActivityChange,
+                onCheckedChange = onNotifySharedActivityChange,
             )
             HorizontalDivider()
             SectionTitle(R.string.settings_about)
@@ -198,18 +193,23 @@ fun SettingsScreenContent(
 }
 
 @Composable
-private fun SwitchRow(@StringRes title: Int, @StringRes summary: Int, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun SwitchRow(
+    @StringRes titleRes: Int,
+    @StringRes summaryRes: Int,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
-            .toggleable(value = checked, onValueChange = onChange, role = Role.Switch),
+            .toggleable(value = checked, onValueChange = onCheckedChange, role = Role.Switch),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(stringResource(title))
+            Text(stringResource(titleRes))
             Text(
-                text = stringResource(summary),
+                text = stringResource(summaryRes),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -20,6 +20,10 @@ data class AppSettings(
     val notifyInvitations: Boolean = true,
     /** Local notification when other members change a shared list. */
     val notifySharedActivity: Boolean = true,
+    /** Master switch for timed reminders: off means no reminder notification, whatever each list has set. */
+    val remindersEnabled: Boolean = true,
+    /** Master switch for the ongoing "Shopping mode" notifications. */
+    val shoppingModeEnabled: Boolean = true,
 )
 
 /** Input limits, enforced in the repository (and mirrored by the UI). They also match the planned AppHub column sizes. */

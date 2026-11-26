@@ -20,6 +20,8 @@ import space.abhijithkm.shoppinglist.core.util.IdGenerator
 import space.abhijithkm.shoppinglist.core.util.UuidGenerator
 import space.abhijithkm.shoppinglist.data.local.AppDatabase
 import space.abhijithkm.shoppinglist.data.local.ItemDao
+import space.abhijithkm.shoppinglist.data.local.ListPrefsDao
+import space.abhijithkm.shoppinglist.data.local.ReminderDao
 import space.abhijithkm.shoppinglist.data.local.ShoppingListDao
 import space.abhijithkm.shoppinglist.data.local.CollabDao
 import space.abhijithkm.shoppinglist.data.local.SyncDao
@@ -79,6 +81,12 @@ object DatabaseModule {
 
     @Provides
     fun provideCollabDao(db: AppDatabase): CollabDao = db.collabDao()
+
+    @Provides
+    fun provideReminderDao(db: AppDatabase): ReminderDao = db.reminderDao()
+
+    @Provides
+    fun provideListPrefsDao(db: AppDatabase): ListPrefsDao = db.listPrefsDao()
 }
 
 @Module

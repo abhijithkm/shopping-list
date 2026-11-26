@@ -71,6 +71,27 @@ class SettingsRepositoryTest {
     }
 
     @Test
+    fun `reminders and shopping mode notifications default to on`() = runTest {
+        val settings = SettingsRepository(newStore()).settings.first()
+        assertTrue(settings.remindersEnabled)
+        assertTrue(settings.shoppingModeEnabled)
+    }
+
+    @Test
+    fun `the reminders switch is persisted`() = runTest {
+        val repository = SettingsRepository(newStore())
+        repository.setRemindersEnabled(false)
+        assertFalse(repository.settings.first().remindersEnabled)
+    }
+
+    @Test
+    fun `the shopping mode switch is persisted`() = runTest {
+        val repository = SettingsRepository(newStore())
+        repository.setShoppingModeEnabled(false)
+        assertFalse(repository.settings.first().shoppingModeEnabled)
+    }
+
+    @Test
     fun `grouping by category is persisted`() = runTest {
         val repository = SettingsRepository(newStore())
         repository.setGroupByCategory(true)
