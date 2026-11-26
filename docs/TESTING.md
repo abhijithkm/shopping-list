@@ -80,10 +80,27 @@ Run the fake server first (`node backend/apphub/fake-server/server.mjs --port 87
 
 Gotcha: an emulator left in airplane mode by an earlier check makes every request fail with "can't reach the server" (`adb shell settings get global airplane_mode_on`).
 
+## Phase 5: widget, reminders, shopping mode
+
+Automated: `ReminderMathTest` (once, daily, weekly, DST gap and overlap, time-zone change, the boot catch-up boundaries), `ReminderSchedulerTest` (cancel for a deleted, archived or disabled list, re-arm on restore, skip rules, catch-up within 24 h, the global switch), `ShoppingModeContentTest` and `ShoppingModeRefresherTest`, `SurfaceUpdaterTest` (a burst of writes refreshes once; fake change source), `WidgetRowsTest` (incl. the `widgetModels` flow), `OpenListResolveTest`, `ReminderViewModelTest`, `SettingsRepositoryTest`; instrumented: `SurfaceDaoTest`, the Room v2 to v3 migration, `MarkAllBoughtTest`, `SurfaceUpdaterWritePathsTest` (any Room writer triggers a refresh), `SurfaceNotifierTest` (waits for the system's asynchronous posts), `ReminderAlarmsTest` (a `PendingIntent` with `FLAG_NO_CREATE` proves an alarm exists), `OpenListIntentTest`, `NotificationsUiTest`.
+
+Not automated, because there is no Hilt test setup and a `GlanceId` exists only for a widget hosted by a launcher: the widget itself (chooser, tick, quick-add) and the receivers. Check them by hand on an emulator:
+
+1. Install the debug build, grant `android.permission.POST_NOTIFICATIONS` (`adb shell pm grant`), launch once.
+2. Seed a list (a debug build lets `run-as` read the database): stop the app, then with `adb shell run-as space.abhijithkm.shoppinglist sqlite3 databases/shoppinglist.db` insert a row into `lists`, a few into `items`, `list_prefs (listId, shoppingMode) = (id, 1)` and a `reminders` row with `oneTimeAtMillis` 90 s ahead; start the app. Room does not see writes from another process, so restart the app after each seeding.
+3. `adb shell dumpsys notification --noredact` shows the ongoing silent notification; `adb shell dumpsys alarm | grep ReminderReceiver` shows the alarm; wait for it to fire (inexact: possibly a minute late) and check the reminder notification and that the one-time row is disabled.
+4. Pull the notification shade down, expand the shopping-mode notification, tap Mark all done: items become bought, the notification goes away.
+5. `adb shell am start -n space.abhijithkm.shoppinglist/.MainActivity --es open_list <id>` opens the list; an unknown id shows the "not available" message on the Lists screen.
+6. Long-press the home screen, Widgets, Shopping List, Add: the chooser appears; choose the list; the widget shows the list. Tick an item (the row and the widget change at once); tap "+" and add "2 kg rice".
+7. `adb reboot`, do not open the app: about a minute after boot `dumpsys alarm` shows the reminder alarm again.
+
+Gotchas: typing with `adb shell input text` into a dialog fails if the soft keyboard moved it (screenshot first); `adb shell settings put secure stylus_handwriting_enabled 0` stops the keyboard's stylus tutorial swallowing text.
+
 ## Not covered yet
 
 - Real drag and swipe gestures are checked by hand on a device (the swipe-then-undo path also has a Compose regression test); there is no automated drag-and-drop test.
 - Instrumented tests that go through Hilt and the real database from the UI (end-to-end) do not exist yet.
 - Performance with very large lists, cold-start time and battery are Phase 6 items.
 - **The real cloud AppHub.** Sync and authentication are tested against fakes only (see [IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md), Phase 3).
-- Collaboration, widgets and reminders arrive with their phases; their test plans are in [IMPLEMENTATION_PLAN](IMPLEMENTATION_PLAN.md) and [APPHUB_FEASIBILITY §9](APPHUB_FEASIBILITY.md).
+- Collaboration is parked (Phase 4); its test plan is in [IMPLEMENTATION_PLAN](IMPLEMENTATION_PLAN.md) and [APPHUB_FEASIBILITY §9](APPHUB_FEASIBILITY.md).
+- Phase 5 on a physical device, Android 7 to 12, a release (R8) build, a real time-zone change, the system permission dialog, and TalkBack are not covered (see [IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md)).

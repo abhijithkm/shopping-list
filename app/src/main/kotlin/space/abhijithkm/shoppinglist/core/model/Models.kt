@@ -16,6 +16,10 @@ data class AppSettings(
     val showCompleted: Boolean = true,
     val listSort: ListSort = ListSort.RECENT,
     val groupByCategory: Boolean = false,
+    /** Master switch for timed reminders: off means no reminder notification, whatever each list has set. */
+    val remindersEnabled: Boolean = true,
+    /** Master switch for the ongoing "Shopping mode" notifications. */
+    val shoppingModeEnabled: Boolean = true,
 )
 
 /** Input limits, enforced in the repository (and mirrored by the UI). They also match the planned AppHub column sizes. */

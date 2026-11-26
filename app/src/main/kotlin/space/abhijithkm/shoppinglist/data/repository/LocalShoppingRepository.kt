@@ -161,6 +161,16 @@ class LocalShoppingRepository @Inject constructor(
         }
     }
 
+    /** Ticks every open item of the list ("Mark all done" in the notification). Nothing is deleted, so there is no undo: items can be unticked. */
+    suspend fun markAllBought(listId: String) {
+        val now = clock.nowMillis()
+        db.withTransaction {
+            if (items.openItemsInOrder(listId).isEmpty()) return@withTransaction
+            items.markAllBought(listId, now)
+            lists.touch(listId, now)
+        }
+    }
+
     suspend fun deleteItem(id: String) {
         val now = clock.nowMillis()
         db.withTransaction {

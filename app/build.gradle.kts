@@ -77,6 +77,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // minSdk is 24 but java.time (reminders) needs API 26: core library desugaring backports it.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     buildFeatures {
@@ -136,6 +138,11 @@ dependencies {
 
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.hilt.work)
+
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
+
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
     ksp(libs.androidx.hilt.compiler)
 
     implementation(libs.retrofit)

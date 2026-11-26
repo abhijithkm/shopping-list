@@ -92,6 +92,26 @@ One row per synced entity that sync has touched. Primary key `(type, id)` where 
 
 Primary key `(accountId, key)`, `value` TEXT. Keys: `cursor.tag`, `cursor.category`, `cursor.list`, `cursor.item` (newest server `updated_at` seen per table), `lastPullAt`, `lastSuccessAt`, `lastRun` (JSON of the latest run's outcome and counts).
 
+### `reminders` (v3)
+
+A list's timed reminder, one row per list, on this device only (never synced, not in the cloud config). Primary key `listId`, foreign key to `lists(id)` with `ON DELETE CASCADE`: a purged list loses its reminder, a soft-deleted one keeps it so a restored list gets it back (the scheduler and notifier check `deletedAt` and `isArchived` themselves).
+
+| Column | Type | Notes |
+|---|---|---|
+| `enabled` | INTEGER (bool) | off keeps the settings; a one-time reminder switches itself off after it fires |
+| `repeat` | TEXT | `NONE` (once), `DAILY` or `WEEKLY` |
+| `hour`, `minute` | INTEGER | local time of day, in the device's time zone at the moment the alarm is computed |
+| `daysOfWeekMask` | INTEGER | weekly only: bit 0 = Monday up to bit 6 = Sunday |
+| `oneTimeAtMillis` | INTEGER? | once only: the epoch ms to fire at |
+| `onlyIfItemsRemain` | INTEGER (bool) | skip the notification when nothing is left to buy |
+| `lastFiredAt` | INTEGER? | epoch ms of the last fire; stops a missed reminder being caught up twice after a reboot |
+
+### `list_prefs` (v3)
+
+Per-list switches on this device only, kept out of `lists` so the synced entity and its field list do not change. Primary key `listId`, foreign key to `lists(id)` with `ON DELETE CASCADE`. `shoppingMode` (INTEGER, bool): the list's ongoing "Shopping mode" notification is on.
+
+The widget's per-instance list choice is not in Room: it lives in each widget's own Glance state (`files/datastore/appWidget-<id>.preferences_pb`, key `list_id`).
+
 ## Main queries (contracts the UI relies on)
 
 - Lists screen: lists with `deletedAt IS NULL` and the requested `isArchived`, with live `totalCount` and `boughtCount` (deleted items excluded), pinned first then by `updatedAt`; the ViewModel then re-sorts by the chosen order.
